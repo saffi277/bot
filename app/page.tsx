@@ -2,42 +2,28 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from 'react';
 
-type Controls = {
-  brightness: number;
-  contrast: number;
-  saturation: number;
-  sharpen: number;
-  scale: number;
-};
+type Controls = { brightness: number; contrast: number; saturation: number; sharpen: number; scale: number };
+type Preset = { name: string; values: Controls };
 
-const initialControls: Controls = {
-  brightness: 100,
-  contrast: 105,
-  saturation: 105,
-  sharpen: 0.35,
-  scale: 1,
-};
+const defaultControls: Controls = { brightness: 100, contrast: 105, saturation: 105, sharpen: 0.25, scale: 1 };
+const presets: Preset[] = [
+  { name: 'طبيعي', values: defaultControls },
+  { name: 'مضيء', values: { brightness: 116, contrast: 108, saturation: 106, sharpen: 0.3, scale: 1 } },
+  { name: 'ألوان قوية', values: { brightness: 104, contrast: 118, saturation: 128, sharpen: 0.35, scale: 1 } },
+];
 
-const controlsMeta: Array<{
-  key: Exclude<keyof Controls, 'scale'>;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  suffix: string;
-}> = [
-  { key: 'brightness', label: 'الإضاءة', min: 60, max: 145, step: 1, suffix: '%' },
-  { key: 'contrast', label: 'التباين', min: 60, max: 150, step: 1, suffix: '%' },
+const fields: Array<{ key: Exclude<keyof Controls, 'scale'>; label: string; min: number; max: number; step: number; suffix: string }> = [
+  { key: 'brightness', label: 'الإضاءة', min: 55, max: 145, step: 1, suffix: '%' },
+  { key: 'contrast', label: 'التباين', min: 65, max: 150, step: 1, suffix: '%' },
   { key: 'saturation', label: 'الألوان', min: 0, max: 170, step: 1, suffix: '%' },
   { key: 'sharpen', label: 'الوضوح', min: 0, max: 1, step: 0.05, suffix: '' },
 ];
 
-function drawProcessedImage(image: HTMLImageElement, canvas: HTMLCanvasElement, controls: Controls) {
-  const maxDimension = 2600;
-  const naturalScale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
-  const outputScale = naturalScale * controls.scale;
-  const width = Math.max(1, Math.round(image.naturalWidth * outputScale));
-  const height = Math.max(1, Math.round(image.naturalHeight * outputScale));
+function renderImage(image: HTMLImageElement, canvas: HTMLCanvasElement, controls: Controls) {
+  const maximum = 2600;
+  const fitScale = Math.min(1, maximum / (Math.max(image.naturalWidth, image.naturalHeight) * controls.scale));
+  const width = Math.max(1, Math.round(image.naturalWidth * fitScale * controls.scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * fitScale * controls.scale));
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d', { willReadFrequently: controls.sharpen > 0 });
@@ -48,103 +34,151 @@ function drawProcessedImage(image: HTMLImageElement, canvas: HTMLCanvasElement, 
   context.filter = `brightness(${controls.brightness}%) contrast(${controls.contrast}%) saturate(${controls.saturation}%)`;
   context.drawImage(image, 0, 0, width, height);
   context.filter = 'none';
-  if (controls.sharpen <= 0) return;
+  if (controls.sharpen === 0) return;
 
   const source = context.getImageData(0, 0, width, height);
-  const result = context.createImageData(width, height);
+  const destination = context.createImageData(width, height);
   const amount = controls.sharpen;
-  const pixels = source.data;
-  const output = result.data;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const pixel = (y * width + x) * 4;
+      const index = (y * width + x) * 4;
       if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
-        output[pixel] = pixels[pixel]; output[pixel + 1] = pixels[pixel + 1]; output[pixel + 2] = pixels[pixel + 2]; output[pixel + 3] = pixels[pixel + 3];
+        destination.data.set(source.data.subarray(index, index + 4), index);
         continue;
       }
-      const top = pixel - width * 4;
-      const bottom = pixel + width * 4;
-      const left = pixel - 4;
-      const right = pixel + 4;
+      const top = index - width * 4;
+      const bottom = index + width * 4;
+      const left = index - 4;
+      const right = index + 4;
       for (let channel = 0; channel < 3; channel += 1) {
-        const center = pixels[pixel + channel];
-        const neighbours = pixels[top + channel] + pixels[bottom + channel] + pixels[left + channel] + pixels[right + channel];
-        output[pixel + channel] = Math.max(0, Math.min(255, center * (1 + 4 * amount) - neighbours * amount));
+        const center = source.data[index + channel];
+        const nearby = source.data[top + channel] + source.data[bottom + channel] + source.data[left + channel] + source.data[right + channel];
+        destination.data[index + channel] = Math.max(0, Math.min(255, center * (1 + 4 * amount) - nearby * amount));
       }
-      output[pixel + 3] = pixels[pixel + 3];
+      destination.data[index + 3] = source.data[index + 3];
     }
   }
-  context.putImageData(result, 0, 0);
+  context.putImageData(destination, 0, 0);
 }
 
 export default function Home() {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const job = useRef(0);
   const [file, setFile] = useState<File | null>(null);
-  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [controls, setControls] = useState<Controls>(initialControls);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
+  const [processedUrl, setProcessedUrl] = useState<string | null>(null);
+  const [controls, setControls] = useState<Controls>(defaultControls);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('الصورة لا تغادر جهازك في هذه النسخة.');
 
-  useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl); if (resultUrl) URL.revokeObjectURL(resultUrl); }, [sourceUrl, resultUrl]);
+  useEffect(() => () => { if (originalUrl) URL.revokeObjectURL(originalUrl); if (processedUrl) URL.revokeObjectURL(processedUrl); }, [originalUrl, processedUrl]);
 
-  const processFile = (nextFile: File, nextControls: Controls) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    setIsProcessing(true); setNotice('جارٍ تحسين الصورة…');
+  const process = (nextFile: File, nextControls: Controls) => {
+    const output = canvas.current;
+    if (!output) return;
+    const currentJob = ++job.current;
+    setBusy(true);
+    setMessage('جارٍ تجهيز النتيجة…');
+    const imageUrl = URL.createObjectURL(nextFile);
     const image = new Image();
     image.onload = () => {
-      drawProcessedImage(image, canvas, nextControls);
-      canvas.toBlob((blob) => {
-        if (blob) setResultUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(blob); });
-        setNotice(blob ? 'جاهزة للتنزيل' : 'تعذر تجهيز النتيجة.'); setIsProcessing(false);
+      if (currentJob !== job.current) { URL.revokeObjectURL(imageUrl); return; }
+      renderImage(image, output, nextControls);
+      URL.revokeObjectURL(imageUrl);
+      output.toBlob((blob) => {
+        if (currentJob !== job.current) return;
+        if (blob) {
+          setProcessedUrl((previous) => { if (previous) URL.revokeObjectURL(previous); return URL.createObjectURL(blob); });
+          setMessage('النتيجة جاهزة للتنزيل.');
+        } else setMessage('تعذر تجهيز الصورة. جرّب صورة أخرى.');
+        setBusy(false);
       }, 'image/jpeg', 0.94);
     };
-    image.onerror = () => { setNotice('تعذر قراءة هذه الصورة. جرّب JPG أو PNG أو WebP.'); setIsProcessing(false); };
-    image.src = URL.createObjectURL(nextFile);
+    image.onerror = () => { URL.revokeObjectURL(imageUrl); if (currentJob === job.current) { setBusy(false); setMessage('ندعم JPG وPNG وWebP فقط.'); } };
+    image.src = imageUrl;
   };
 
-  const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const selected = event.target.files?.[0];
-    if (!selected) return;
-    if (!selected.type.startsWith('image/')) { setNotice('يرجى اختيار صورة فقط.'); return; }
-    if (selected.size > 15 * 1024 * 1024) { setNotice('للنسخة الأولى، الحد الأقصى للصورة هو 15MB.'); return; }
-    setSourceUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(selected); });
-    setFile(selected); processFile(selected, controls);
+  const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0];
+    if (!nextFile) return;
+    if (!nextFile.type.startsWith('image/')) { setMessage('اختر صورة فقط.'); return; }
+    if (nextFile.size > 15 * 1024 * 1024) { setMessage('حجم الصورة يجب أن يكون أقل من 15MB.'); return; }
+    setOriginalUrl((previous) => { if (previous) URL.revokeObjectURL(previous); return URL.createObjectURL(nextFile); });
+    setFile(nextFile);
+    process(nextFile, controls);
   };
 
-  const updateControl = (key: Exclude<keyof Controls, 'scale'>, value: number) => {
-    const nextControls = { ...controls, [key]: value }; setControls(nextControls); if (file) processFile(file, nextControls);
+  const update = (key: Exclude<keyof Controls, 'scale'>, value: number) => {
+    const next = { ...controls, [key]: value };
+    setControls(next);
+    if (file) process(file, next);
   };
-  const downloadImage = () => {
-    if (!resultUrl) return;
-    const link = document.createElement('a'); link.href = resultUrl; link.download = `bot-enhanced-${file?.name.replace(/\.[^/.]+$/, '') || 'image'}.jpg`; link.click();
+  const applyPreset = (preset: Preset) => { setControls(preset.values); if (file) process(file, preset.values); };
+  const download = () => {
+    if (!processedUrl) return;
+    const link = document.createElement('a');
+    link.href = processedUrl;
+    link.download = `bot-${file?.name.replace(/\.[^/.]+$/, '') || 'photo'}.jpg`;
+    link.click();
   };
 
   return (
-    <main dir="rtl">
-      <canvas ref={canvasRef} className="sr-only" aria-hidden="true" />
-      <section className="hero-shell">
-        <nav className="nav-wrap" aria-label="التنقل الرئيسي">
-          <a className="brand" href="#top" aria-label="Bot الصفحة الرئيسية"><span className="brand-mark">b</span><span>bot<span className="brand-dot">.</span></span></a>
-          <div className="nav-actions"><a className="text-link" href="#how-it-works">كيف يعمل</a><button className="telegram-button" type="button" onClick={() => setNotice('سيتم ربط هذا الزر ببوت تلغرام عند إضافة الرمز الخاص به.')}>تيليغرام ↗</button></div>
+    <main>
+      <canvas ref={canvas} className="visually-hidden" aria-hidden="true" />
+      <section className="top-section" id="top">
+        <nav className="navigation" aria-label="التنقل">
+          <a className="logo" href="#top"><span className="logo-mark">b</span><span>bot<span>.</span></span></a>
+          <div className="navigation-links"><a href="#benefits">المميزات</a><a href="#how">كيف يعمل</a><a className="nav-cta" href="#editor">ابدأ الآن <b>←</b></a></div>
         </nav>
-        <div className="hero-grid" id="top">
-          <div className="hero-copy"><p className="eyebrow">معالجة صور واضحة، بدون ذكاء اصطناعي</p><h1>خلّي صورتك <em>أنظف</em><br />وبالطريقة اللي تحبها.</h1><p className="hero-description">أداة خفيفة لتحسين الإضاءة، الألوان، التباين والوضوح. جرّبها الآن بدون تسجيل وبدون رفع صورتك إلى خادم.</p><div className="hero-points"><span>✓ معالجة مباشرة في المتصفح</span><span>✓ JPG · PNG · WebP</span></div></div>
-          <div className="editor-card" aria-live="polite">
-            <div className="card-header"><div><p className="card-kicker">أداة التحسين</p><h2>{file ? file.name : 'ارفع صورة للبدء'}</h2></div><span className="status-pill">نسخة تجريبية</span></div>
-            {!sourceUrl ? (
-              <button className="upload-area" type="button" onClick={() => inputRef.current?.click()}><span className="upload-icon">＋</span><strong>اسحب الصورة هنا أو اخترها من جهازك</strong><small>الحد الأقصى 15MB</small></button>
+
+        <div className="hero-layout">
+          <div className="hero-content">
+            <div className="live-label"><i /> متاح الآن · بدون تسجيل</div>
+            <p className="section-label">محرر صور خاص وسريع</p>
+            <h1>صوّرك أوضح.<br /><em>بطريقتك.</em></h1>
+            <p className="hero-text">حسّن الإضاءة والألوان والحدة خلال ثوانٍ. أداة بسيطة ومهنية، تعمل في المتصفح وتحافظ على خصوصية صورتك.</p>
+            <div className="hero-actions"><a className="primary-action" href="#editor">عدّل صورة الآن <span>↓</span></a><a className="quiet-action" href="#how">شوف كيف تعمل <span>←</span></a></div>
+            <div className="trust-row"><span><b>01</b> بدون اشتراك</span><span><b>02</b> لا علامة مائية</span><span><b>03</b> خصوصية كاملة</span></div>
+          </div>
+          <aside className="hero-panel" aria-label="ملخص خدمة Bot">
+            <div className="panel-top"><span>BOT STUDIO</span><b>● مباشر</b></div>
+            <div className="panel-art"><div className="art-grid"><i /><i /><i /><i /><i /><i /></div><div className="art-focus" /></div>
+            <div className="panel-metrics"><div><span>التحسين</span><strong>٤ أدوات</strong></div><div><span>المعالجة</span><strong>محلية</strong></div></div>
+            <p>أنت المتحكّم بالنتيجة، وليس فلترًا غامضًا.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section className="studio-section" id="editor">
+        <div className="studio-heading"><div><p className="section-label">مساحة العمل</p><h2>عدّل الصورة، ثم نزّلها.</h2></div><p>اختَر صورة وجرّب أحد الإعدادات الجاهزة أو اضبط كل شيء بنفسك.</p></div>
+        <div className="studio-shell">
+          <aside className="control-panel">
+            <div className="workspace-title"><span className="number-badge">01</span><div><b>إعدادات التحسين</b><small>تظهر النتيجة فوراً</small></div></div>
+            <div className="preset-group"><span className="small-title">إعداد سريع</span><div>{presets.map((preset) => <button key={preset.name} type="button" onClick={() => applyPreset(preset)}>{preset.name}</button>)}</div></div>
+            <div className="adjustment-group"><span className="small-title">ضبط يدوي</span>{fields.map((field) => <label key={field.key}><span><b>{field.label}</b><output>{field.key === 'sharpen' ? Math.round(controls[field.key] * 100) : controls[field.key]}{field.suffix}</output></span><input type="range" min={field.min} max={field.max} step={field.step} value={controls[field.key]} onChange={(event) => update(field.key, Number(event.target.value))} /></label>)}</div>
+            <label className="scale-select"><span><b>الحجم النهائي</b><output>{controls.scale}×</output></span><select value={controls.scale} onChange={(event) => { const next = { ...controls, scale: Number(event.target.value) }; setControls(next); if (file) process(file, next); }}><option value="1">الحجم الأصلي</option><option value="1.5">تكبير 1.5×</option><option value="2">تكبير 2×</option></select></label>
+            <button className="reset-button" type="button" onClick={() => applyPreset(presets[0])}>إعادة كل الإعدادات</button>
+          </aside>
+
+          <div className="preview-panel">
+            <div className="preview-header"><div><span className="small-title">المعاينة</span><strong>{file?.name || 'ماكو صورة مختارة'}</strong></div><span className={busy ? 'processing-state active' : 'processing-state'}>{busy ? 'جارٍ المعالجة' : processedUrl ? 'جاهزة' : 'بانتظار الصورة'}</span></div>
+            {!originalUrl ? (
+              <button className="drop-zone" type="button" onClick={() => fileInput.current?.click()}><span className="drop-icon">↥</span><strong>ارفع صورة حتى نبدأ</strong><small>JPG · PNG · WebP · حتى 15MB</small><span className="choose-file">اختيار صورة</span></button>
             ) : (
-              <div className="image-workspace"><div className="image-frame">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={resultUrl || sourceUrl} alt="معاينة الصورة بعد المعالجة" />{isProcessing && <div className="processing-overlay">جارٍ المعالجة…</div>}</div><div className="workspace-actions"><button className="secondary-button" type="button" onClick={() => inputRef.current?.click()}>تبديل الصورة</button><button className="download-button" type="button" disabled={!resultUrl || isProcessing} onClick={downloadImage}>تنزيل JPG ↓</button></div></div>
+              <div className="result-area"><div className="image-stage"><img src={processedUrl || originalUrl} alt="الصورة بعد التحسين" />{busy && <div className="working-overlay">نعالج الصورة…</div>}</div><div className="result-actions"><button type="button" className="replace-button" onClick={() => fileInput.current?.click()}>تبديل الصورة</button><button type="button" className="save-button" disabled={!processedUrl || busy} onClick={download}>تنزيل النتيجة <span>↓</span></button></div></div>
             )}
-            <input ref={inputRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} />
-            <div className="controls-section"><div className="controls-title"><span>ضبط النتيجة</span><button type="button" onClick={() => { setControls(initialControls); if (file) processFile(file, initialControls); }}>إعادة ضبط</button></div><div className="sliders">{controlsMeta.map((control) => (<label key={control.key}><span><b>{control.label}</b><output>{control.key === 'sharpen' ? Math.round(controls[control.key] * 100) : controls[control.key]}{control.suffix}</output></span><input type="range" min={control.min} max={control.max} step={control.step} value={controls[control.key]} onChange={(event) => updateControl(control.key, Number(event.target.value))} /></label>))}<label><span><b>الحجم</b><output>{controls.scale}×</output></span><select value={controls.scale} onChange={(event) => { const nextControls = { ...controls, scale: Number(event.target.value) }; setControls(nextControls); if (file) processFile(file, nextControls); }}><option value="1">الحجم الأصلي</option><option value="1.5">تكبير 1.5×</option><option value="2">تكبير 2×</option></select></label></div><p className="privacy-note">{notice || 'التكبير هنا تقليدي، لا يضيف تفاصيل غير موجودة في الصورة.'}</p></div>
+            <input ref={fileInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} />
+            <p className="workspace-note"><span>⌁</span>{message}</p>
           </div>
         </div>
       </section>
-      <section className="steps-section" id="how-it-works"><p className="eyebrow">سريع وواضح</p><h2>ثلاث خطوات، والنتيجة عندك.</h2><div className="steps-grid"><article><span>01</span><h3>اختر صورتك</h3><p>ارفع JPG أو PNG أو WebP من الموبايل أو الكمبيوتر.</p></article><article><span>02</span><h3>اضبطها بطريقتك</h3><p>تحكّم بالإضاءة والألوان والتباين والوضوح بشكل مباشر.</p></article><article><span>03</span><h3>نزّلها فوراً</h3><p>احفظ نسخة JPG محسّنة، بدون علامة مائية في النسخة التجريبية.</p></article></div></section>
+
+      <section className="benefits-section" id="benefits"><div className="benefit-heading"><p className="section-label">مصمم حتى يكون سهل</p><h2>تحسين حقيقي،<br />بدون تعقيد.</h2></div><div className="benefits-list"><article><span>01</span><h3>النتيجة تحت سيطرتك</h3><p>بدل فلتر واحد، اضبط الإضاءة والتباين والألوان والوضوح بدقة.</p></article><article><span>02</span><h3>صورتك تبقى عندك</h3><p>المعالجة تتم في المتصفح، لذلك الصورة لا تنتقل لخادمنا في هذه المرحلة.</p></article><article><span>03</span><h3>جاهز من تلغرام</h3><p>بوت تلغرام يعرّف بالخدمة ويفتح لك المحرر مباشرة من المحادثة.</p></article></div></section>
+
+      <section className="how-section" id="how"><div><p className="section-label">ثلاث خطوات فقط</p><h2>من صورة عادية<br />إلى نسخة مرتبة.</h2></div><ol><li><b>١</b><div><strong>ارفع الصورة</strong><span>اختَرها من موبايلك أو جهازك.</span></div></li><li><b>٢</b><div><strong>اضبطها بطريقتك</strong><span>استعمل الإعدادات الجاهزة أو حرّك أدوات التحكم.</span></div></li><li><b>٣</b><div><strong>نزّل النتيجة</strong><span>احفظ نسخة JPG جاهزة للمشاركة.</span></div></li></ol></section>
+
+      <footer><a className="logo" href="#top"><span className="logo-mark">b</span><span>bot<span>.</span></span></a><p>تحسين صور واضح، سريع، وبدون ذكاء اصطناعي.</p><a href="#top">أعلى الصفحة ↑</a></footer>
     </main>
   );
 }

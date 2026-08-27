@@ -5,6 +5,13 @@ import nextTs from 'eslint-config-next/typescript';
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    files: ['app/page.tsx'],
+    rules: {
+      // The editor renders browser-local Blob URLs, which Next's image loader cannot serve.
+      '@next/next/no-img-element': 'off',
+    },
+  },
   globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
 ]);
 
