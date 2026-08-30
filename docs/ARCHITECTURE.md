@@ -25,6 +25,13 @@
    إرسال صورة بدقتها الأصلية للمزوّد يضاعف الفاتورة **15 مرة**. المُخرَج
    المعتمد: **سقف 2048px على الضلع الطويل**.
 
+   4b. **الواجهة بلا ضبط يدوي.** رفع → معالجة تلقائية → مقارنة قبل/بعد →
+   تنزيل. لا sliders ولا إعدادات جاهزة — كانت من منطق الفلاتر القديم.
+
+   4c. **لا وعود توليدية.** v1 اسمه «ترميم وتحسين تلقائي للصور والوجوه».
+   النموذج لا يَعِد بإعادة بناء عضو ناقص. التوقّع يُوضَّح في الواجهة قبل أول
+   رفع — الوعد الزائد أكبر مسبّب للتقييمات السيئة.
+
 5. **كل نداء للنماذج يمر عبر `lib/enhance/provider.ts`.**
    ممنوع استدعاء مزوّد مباشرةً من أي مسار API أو مكوّن واجهة. سبب ذلك أن
    الانتقال لسيرفر GPU خاص عند 45 ألف صورة/شهر يجب أن يكون بتبديل ملف واحد.
@@ -48,7 +55,8 @@ lib/
   enhance/
     provider.ts             الواجهة المجرّدة  ← نقطة العزل
     fal.ts                  تطبيق المزوّد المُدار
-  ratelimit.ts              الحد اليومي
+  ratelimit.ts              الحدود الثلاث + السقف الإجمالي
+  usage-log.ts              تسجيل التكلفة والزمن في D1
   telegram.ts               مساعدات Telegram API
   telegram-auth.ts          التحقق من توقيع Telegram Login
 telegram-bot/
@@ -63,25 +71,33 @@ docs/
 ## 3. الواجهة المجرّدة للمزوّد
 
 هذا هو العقد الأهم في المشروع. أي مزوّد جديد يطبّق هذه الواجهة، ولا يتغيّر شيء
-آخر في المشروع.
+آخر. الحقول المؤشَّرة أضافها Codex في مراجعة `DISCUSSION.md §8.1`.
 
 ```ts
 // lib/enhance/provider.ts
 
 export type EnhanceRequest = {
-  /** الصورة المدخلة، مصغَّرة مسبقاً على العميل */
   image: ArrayBuffer;
-  /** سقف الضلع الطويل للمُخرَج. الافتراضي 2048 */
+  /** MIME type of the input, so the provider does not have to sniff it */
+  inputContentType: string;
+  /** Longest output edge. Default 2048 — see ARCHITECTURE.md §1.4 */
   maxOutputEdge: number;
-  /** قوة الترميم 0..1 — موازنة بين الواقعية والحفاظ على الهوية */
+  /** Restoration strength 0..1 — realism against identity preservation */
   fidelity: number;
+  /** Trace id, carried through logs and the provider call */
+  requestId: string;
 };
 
 export type EnhanceResult = {
   image: ArrayBuffer;
   contentType: string;
-  /** ميجابكسل المُخرَج — يُسجَّل لتتبّع التكلفة الفعلية */
+  /** Output megapixels — the unit the provider bills on */
   outputMegapixels: number;
+  /** Model that actually ran, for cost attribution across models */
+  model: string;
+  requestId: string;
+  /** Wall-clock duration — decides whether async processing is needed */
+  durationMs: number;
 };
 
 export interface EnhanceProvider {
@@ -91,10 +107,41 @@ export interface EnhanceProvider {
 ```
 
 **قواعد:**
-- المزوّد لا يعرف شيئاً عن تلگرام ولا عن المستخدمين ولا عن الحدود اليومية.
-- `outputMegapixels` **إلزامي** في النتيجة — بدونه لا يمكن تتبّع التكلفة الفعلية
-  ومقارنتها بالمقدَّر.
+
+- المزوّد لا يعرف شيئاً عن تلگرام ولا المستخدمين ولا الحدود اليومية.
+- `outputMegapixels` و`durationMs` **إلزاميان** — بدونهما لا يمكن تتبّع التكلفة
+  الفعلية ولا حسم قرار المعالجة غير المتزامنة.
 - أي فشل من المزوّد يُرمى كاستثناء؛ التعامل معه مسؤولية مسار الـ API.
+- **الطابور داخلي.** إن استخدم المزوّد طابوراً للطلبات الطويلة فذلك يبقى داخل
+  `lib/enhance/fal.ts`؛ العميل لا يرى حالة وظيفة إطلاقاً. راجع
+  `DISCUSSION.md §8.4`.
+
+### 3.1 سجلّ الاستخدام — إلزامي
+
+يُسجَّل في D1 لكل طلب: `requestId`, `model`, `outputMegapixels`, `durationMs`,
+والنتيجة (نجاح/فشل). بدونه تبقى الفاتورة تخميناً.
+
+---
+
+## 3.2 الحدود اليومية — ثلاث طبقات
+
+الحد لكل مستخدم **لا يحمي الفاتورة** وحده: 5,000 مستخدم × 5 صور = $165 في يوم.
+لذلك يعلو الحدَّين الفرديين سقفٌ إجمالي.
+
+| الطبقة | المتغيّر | القيمة الأولية | ما تحميه |
+|---|---|---|---|
+| لكل زائر (IP) | `LIMIT_GUEST_DAILY` | 3 | الاستنزاف الفردي بلا تسجيل |
+| لكل حساب تلگرام | `LIMIT_USER_DAILY` | 5 | الاستنزاف الفردي المسجَّل |
+| 🔴 سقف إجمالي | `DAILY_GLOBAL_CAP` | 250 | **سقف الفاتورة الشهرية** |
+
+عند بلوغ السقف الإجمالي يرد الموقع برسالة عربية مهذّبة **ولا يُستدعى المزوّد
+إطلاقاً**. القيم كلها من متغيّرات بيئة لتُضبط بلا إعادة نشر.
+
+`DAILY_GLOBAL_CAP = 250` يعني سقف فاتورة ≈ **$50/شهر**. المعادلة:
+
+```
+السقف اليومي = (الميزانية الشهرية ÷ $0.0066) ÷ 30
+```
 
 ---
 
@@ -151,6 +198,10 @@ lib/enhance/provider.ts
 | `TELEGRAM_BOT_TOKEN` | توكن البوت من BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | سرّ التحقق من أن الطلب جاء من تلگرام فعلاً |
 | `ENHANCE_PROVIDER_KEY` | مفتاح مزوّد النماذج |
+| `MAX_OUTPUT_EDGE` | سقف الضلع الطويل للمُخرَج. الافتراضي `2048` |
+| `LIMIT_GUEST_DAILY` | حد الزائر غير المسجَّل. الافتراضي `3` |
+| `LIMIT_USER_DAILY` | حد حساب تلگرام. الافتراضي `5` |
+| `DAILY_GLOBAL_CAP` | 🔴 السقف الإجمالي اليومي. الافتراضي `250` |
 
 القيم الحقيقية **لا تدخل الگت أبداً**. `.env.example` يوثّق الأسماء فقط.
 
