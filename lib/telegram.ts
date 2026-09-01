@@ -1,6 +1,7 @@
 /** Shared Telegram Bot API helpers, extracted from the webhook route. */
 
-const API_BASE = 'https://api.telegram.org/bot';
+/** Overridable so the bot's flow can be walked end to end against a stub. */
+const API_BASE = process.env.TELEGRAM_API_BASE || 'https://api.telegram.org/bot';
 
 export type TelegramMessage = {
   message_id?: number;

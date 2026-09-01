@@ -4,7 +4,17 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 type Stage = 'idle' | 'preparing' | 'processing' | 'done';
 type Shot = { url: string; width: number; height: number };
-type Service = { ready: boolean; configured: boolean; storage: boolean; remaining: number; limit: number; maxOutputEdge: number };
+type Service = {
+  ready: boolean;
+  configured: boolean;
+  storage: boolean;
+  remaining: number;
+  limit: number;
+  maxOutputEdge: number;
+  /** Contract with the backend (docs/REVIEW.md round 7). Absent until it lands. */
+  signedIn?: boolean;
+  name?: string;
+};
 
 const FALLBACK_EDGE = 2048;
 const MAX_INPUT_BYTES = 15 * 1024 * 1024;
@@ -264,9 +274,14 @@ export default function Home() {
         <div className="bar-side">
           <a className="bar-link" href="#how">كيف يشتغل</a>
           {service?.storage && (
-            <span className="quota" title="رصيدك اليوم">
+            <span className={service.signedIn ? 'quota is-user' : 'quota'} title="رصيدك اليوم">
               <b>{service.remaining}</b>
               <span>/{service.limit} اليوم</span>
+            </span>
+          )}
+          {service?.signedIn && service.name && (
+            <span className="who" title="مسجّل بحساب تلگرام">
+              {service.name}
             </span>
           )}
         </div>
@@ -408,9 +423,21 @@ export default function Home() {
           </p>
         )}
 
+        <p className="sr-only" role="status" aria-live="polite">
+          {stage === 'preparing'
+            ? 'نجهّز الصورة'
+            : stage === 'processing'
+              ? 'نرمّم الصورة، انتظر من فضلك'
+              : stage === 'done'
+                ? 'النتيجة جاهزة. استعمل أسهم لوحة المفاتيح على مقبض المقارنة لتشوف الفرق.'
+                : ''}
+        </p>
+
         <input
           ref={fileInput}
           className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
           type="file"
           accept="image/jpeg,image/png,image/webp"
           onChange={(event: ChangeEvent<HTMLInputElement>) => {
@@ -419,10 +446,16 @@ export default function Home() {
           }}
         />
 
+        {/* F3 — the output carries an invisible SynthID marker. Saying so is
+            cheaper than being found out. */}
         <p className="expectation">
           <span aria-hidden="true">ⓘ</span>
-          صفّي يرمّم ويحسّن الموجود في الصورة — يشدّ الملامح ويرجّع التفاصيل والألوان.
-          ما يخترع أشياء ناقصة، ويحافظ على ملامح الشخص مثل ما هي.
+          <span>
+            صفّي يرمّم ويحسّن الموجود في الصورة — يشدّ الملامح ويرجّع التفاصيل والألوان.
+            ما يخترع أشياء ناقصة، ويحافظ على ملامح الشخص مثل ما هي.
+            <br />
+            النتيجة تحمل علامة <b>SynthID</b> غير مرئية تدلّ على أنها عولجت بالذكاء الاصطناعي.
+          </span>
         </p>
       </section>
 

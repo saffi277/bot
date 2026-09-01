@@ -25,10 +25,21 @@ const GUIDE = [
   },
 ];
 
-function guideKeyboard(step: number, appUrl: string, startParameter?: string) {
+/**
+ * `next` is the step this keyboard advances TO, so the welcome can point at
+ * step 0 and the guide steps at the one after them.
+ *
+ * The start parameter rides along in callback_data: without it the referral
+ * tag is lost the moment the visitor taps anything, and every conversion after
+ * the first message is attributed to nobody. Telegram caps callback_data at 64
+ * bytes, hence the trim.
+ */
+function guideKeyboard(next: number | null, appUrl: string, startParameter?: string) {
   const rows: Array<Array<Record<string, unknown>>> = [];
-  if (GUIDE[step]?.next) {
-    rows.push([{ text: GUIDE[step].next as string, callback_data: `guide:${step + 1}` }]);
+  const tag = startParameter ? `:${startParameter.slice(0, 40)}` : '';
+  if (next !== null && GUIDE[next]) {
+    const label = next === 0 ? 'وريني شلون ←' : (GUIDE[next - 1]?.next as string);
+    rows.push([{ text: label, callback_data: `guide:${next}${tag}` }]);
   }
   rows.push([{ text: 'افتح صفّي ✦', url: siteLink(appUrl, startParameter) }]);
   return { inline_keyboard: rows };
@@ -41,7 +52,7 @@ async function sendStep(token: string, appUrl: string, chatId: number, step: num
     chat_id: chatId,
     text: `*${entry.title}*\n\n${entry.body}`,
     parse_mode: 'Markdown',
-    reply_markup: guideKeyboard(step, appUrl, startParameter),
+    reply_markup: guideKeyboard(entry.next ? step + 1 : null, appUrl, startParameter),
   });
 }
 
@@ -84,9 +95,10 @@ export async function POST(request: Request) {
     if (update.callback_query) {
       const query = update.callback_query;
       await telegram(token, 'answerCallbackQuery', { callback_query_id: query.id });
-      const step = Number.parseInt(query.data?.split(':')[1] ?? '', 10);
+      const [, rawStep, startParameter] = query.data?.split(':') ?? [];
+      const step = Number.parseInt(rawStep ?? '', 10);
       if (query.message && Number.isInteger(step)) {
-        await sendStep(token, appUrl, query.message.chat.id, step);
+        await sendStep(token, appUrl, query.message.chat.id, step, startParameter || undefined);
       }
     }
 

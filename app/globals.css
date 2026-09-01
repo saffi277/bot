@@ -37,6 +37,12 @@ body {
 }
 
 button, input, select { font: inherit; color: inherit; }
+
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
 button { cursor: pointer; border: 0; background: none; }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
@@ -87,6 +93,15 @@ main { margin: 0 auto; max-width: 1120px; padding: 0 clamp(16px, 4vw, 32px) 64px
   white-space: nowrap;
 }
 .quota b { font-size: 14px; font-weight: 700; }
+.quota.is-user { background: rgba(246, 167, 35, 0.2); border-color: rgba(246, 167, 35, 0.45); }
+.who {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── Hero ────────────────────────────────────────────────────────── */
 .hero { padding: clamp(48px, 9vw, 88px) 0 clamp(32px, 5vw, 48px); text-align: center; }
@@ -354,7 +369,8 @@ main { margin: 0 auto; max-width: 1120px; padding: 0 clamp(16px, 4vw, 32px) 64px
   line-height: 1.65;
   margin: 2px 0 0;
 }
-.expectation span { color: var(--amber); flex-shrink: 0; }
+.expectation > span:first-child { color: var(--amber); flex-shrink: 0; }
+.expectation b { color: var(--ink-soft); font-weight: 600; }
 
 /* ── How ─────────────────────────────────────────────────────────── */
 .how { padding: clamp(56px, 9vw, 88px) 0 0; }
