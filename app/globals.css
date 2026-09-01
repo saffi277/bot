@@ -94,6 +94,12 @@ main { margin: 0 auto; max-width: 1120px; padding: 0 clamp(16px, 4vw, 32px) 64px
 }
 .quota b { font-size: 14px; font-weight: 700; }
 .quota.is-user { background: rgba(246, 167, 35, 0.2); border-color: rgba(246, 167, 35, 0.45); }
+.signin {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+}
+.signin iframe { color-scheme: light; }
 .who {
   color: var(--ink-soft);
   font-size: 12.5px;

@@ -72,8 +72,13 @@ async function sendWelcome(token: string, appUrl: string, message: TelegramMessa
 }
 
 export async function GET() {
-  const { token } = getConfig();
-  return Response.json({ status: token ? 'ready' : 'needs_configuration' });
+  const { token, botUsername } = getConfig();
+  return Response.json({
+    status: token ? 'ready' : 'needs_configuration',
+    // The page renders the sign-in widget only when this is set, so an
+    // unconfigured bot degrades to guest mode instead of a broken button.
+    botUsername: botUsername ?? null,
+  });
 }
 
 export async function POST(request: Request) {

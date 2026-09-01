@@ -67,6 +67,58 @@ function baseName(name: string): string {
   return name.replace(/\.[^/.]+$/, '') || 'photo';
 }
 
+/**
+ * The referral tag the bot attaches to its link, remembered for the visit so a
+ * conversion is still attributed after a reload — otherwise everything past
+ * the first page view counts as coming from nowhere.
+ *
+ * Read at request time rather than held in state: it never changes during a
+ * visit, and nothing renders from it.
+ */
+function readReferral(): string | null {
+  if (typeof window === 'undefined') return null;
+  const fromUrl = new URLSearchParams(window.location.search).get('ref');
+  try {
+    if (fromUrl) window.sessionStorage.setItem('ref', fromUrl);
+    return fromUrl || window.sessionStorage.getItem('ref');
+  } catch {
+    // Private mode or blocked storage: the URL alone still works.
+    return fromUrl;
+  }
+}
+
+/**
+ * Telegram's widget injects its own iframe from a script tag, so it is mounted
+ * imperatively. The domain must be linked to the bot with BotFather /setdomain
+ * or Telegram refuses to render it — hence the fallback copy.
+ */
+function TelegramSignIn({ botUsername }: { botUsername: string }) {
+  const slot = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const host = slot.current;
+    if (!host) return;
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.async = true;
+    script.setAttribute('data-telegram-login', botUsername);
+    script.setAttribute('data-size', 'small');
+    script.setAttribute('data-radius', '8');
+    script.setAttribute('data-userpic', 'false');
+    script.setAttribute('data-auth-url', '/api/auth/telegram');
+    script.setAttribute('data-request-access', 'write');
+    script.onerror = () => setFailed(true);
+    host.appendChild(script);
+    return () => {
+      host.replaceChildren();
+    };
+  }, [botUsername]);
+
+  if (failed) return null;
+  return <div className="signin" ref={slot} aria-label="تسجيل الدخول بتلگرام" />;
+}
+
 export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -82,12 +134,17 @@ export default function Home() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/enhance')
       .then((response) => response.json())
       .then(setService)
       .catch(() => setService(null));
+    fetch('/api/telegram')
+      .then((response) => response.json())
+      .then((info: { botUsername: string | null }) => setBotUsername(info.botUsername))
+      .catch(() => setBotUsername(null));
   }, []);
 
   // Object URLs are revoked on replacement and on unmount to avoid leaking blobs.
@@ -136,7 +193,12 @@ export default function Home() {
       body.append('image', new File([prepared.blob], 'upload.jpg', { type: 'image/jpeg' }));
 
       try {
-        const response = await fetch('/api/enhance', { method: 'POST', body });
+        const referral = readReferral();
+        const response = await fetch('/api/enhance', {
+          method: 'POST',
+          body,
+          headers: referral ? { 'x-ref': referral } : undefined,
+        });
         if (current !== job.current) return;
 
         if (!response.ok) {
@@ -279,10 +341,12 @@ export default function Home() {
               <span>/{service.limit} اليوم</span>
             </span>
           )}
-          {service?.signedIn && service.name && (
+          {service?.signedIn && service.name ? (
             <span className="who" title="مسجّل بحساب تلگرام">
               {service.name}
             </span>
+          ) : (
+            botUsername && <TelegramSignIn botUsername={botUsername} />
           )}
         </div>
       </header>

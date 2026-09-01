@@ -19,6 +19,8 @@ export type TelegramConfig = {
   token: string | undefined;
   secret: string | undefined;
   appUrl: string;
+  /** Public bot handle, needed by the Telegram Login widget on the page. */
+  botUsername: string | undefined;
 };
 
 export function getConfig(): TelegramConfig {
@@ -26,6 +28,7 @@ export function getConfig(): TelegramConfig {
     token: process.env.TELEGRAM_BOT_TOKEN,
     secret: process.env.TELEGRAM_WEBHOOK_SECRET,
     appUrl: (process.env.APP_URL || 'https://saffi277-bot-photo.koorymoe.chatgpt.site').replace(/\/$/, ''),
+    botUsername: process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, ''),
   };
 }
 
