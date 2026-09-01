@@ -1,46 +1,62 @@
-type TelegramMessage = {
-  chat: { id: number };
-  text?: string;
-  from?: { first_name?: string };
-};
+import { getConfig, siteLink, telegram, TelegramMessage, TelegramUpdate } from '@/lib/telegram';
 
-type TelegramUpdate = {
-  message?: TelegramMessage;
-  callback_query?: { id: string; message?: TelegramMessage };
-};
+/**
+ * The bot is an acquisition channel, not the product: it explains the service
+ * once and hands the visitor to the site. It never receives or processes
+ * images (docs/ARCHITECTURE.md §1.1).
+ */
 
-const siteUrl = 'https://saffi277-bot-photo.koorymoe.chatgpt.site';
+/** Three-step guide, walked with "next" buttons so nothing arrives as a wall of text. */
+const GUIDE = [
+  {
+    title: '١ · ارفع صورتك',
+    body: 'افتح الموقع واسحب الصورة، أو الصقها، أو اختَرها من جهازك.\n\nندعم JPG وPNG وWebP حتى 15 ميغابايت.',
+    next: 'وبعدين؟ ←',
+  },
+  {
+    title: '٢ · يشتغل عليها تلقائياً',
+    body: 'الذكاء الاصطناعي يشدّ ملامح الوجه، يرجّع تفاصيل الجلد والشعر، يشيل التشويش، ويصلّح الألوان الباهتة.\n\nبلا أدوات ولا ضبط يدوي — تأخذ عادةً بين 5 و20 ثانية.',
+    next: 'وبعدها؟ ←',
+  },
+  {
+    title: '٣ · قارن ونزّل',
+    body: 'اسحب المقبض بين الصورتين تشوف الفرق بعينك، وبعدها نزّل النتيجة.\n\nملاحظة: صفّي يرمّم الموجود بالصورة ويحافظ على ملامح الشخص — ما يخترع أشياء ناقصة.',
+    next: null,
+  },
+];
 
-function getConfig() {
-  return {
-    token: process.env.TELEGRAM_BOT_TOKEN,
-    secret: process.env.TELEGRAM_WEBHOOK_SECRET,
-    appUrl: process.env.APP_URL || siteUrl,
-  };
+function guideKeyboard(step: number, appUrl: string, startParameter?: string) {
+  const rows: Array<Array<Record<string, unknown>>> = [];
+  if (GUIDE[step]?.next) {
+    rows.push([{ text: GUIDE[step].next as string, callback_data: `guide:${step + 1}` }]);
+  }
+  rows.push([{ text: 'افتح صفّي ✦', url: siteLink(appUrl, startParameter) }]);
+  return { inline_keyboard: rows };
 }
 
-async function telegram(token: string, method: string, body: Record<string, unknown>) {
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+async function sendStep(token: string, appUrl: string, chatId: number, step: number, startParameter?: string) {
+  const entry = GUIDE[step];
+  if (!entry) return;
+  await telegram(token, 'sendMessage', {
+    chat_id: chatId,
+    text: `*${entry.title}*\n\n${entry.body}`,
+    parse_mode: 'Markdown',
+    reply_markup: guideKeyboard(step, appUrl, startParameter),
   });
-  if (!response.ok) throw new Error(`Telegram ${method} failed with ${response.status}`);
 }
 
 async function sendWelcome(token: string, appUrl: string, message: TelegramMessage) {
   const firstName = message.from?.first_name ? ` ${message.from.first_name}` : '';
   const startParameter = message.text?.split(' ')[1];
-  const referral = startParameter ? `?ref=telegram-${encodeURIComponent(startParameter)}` : '?ref=telegram';
   await telegram(token, 'sendMessage', {
     chat_id: message.chat.id,
-    text: `هلا${firstName} 👋\n\nأهلاً بك في bot. هنا تعدّل صورتك بنفسك: إضاءة، ألوان، تباين ووضوح — بدون ذكاء اصطناعي وبدون رفع الصورة إلى خادم.`,
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'فتح محرر الصور ✦', web_app: { url: `${appUrl}${referral}` } }],
-        [{ text: 'شنو يگدر يسوي؟', callback_data: 'help' }],
-      ],
-    },
+    text:
+      `هلا${firstName} 👋\n\n` +
+      'أهلاً بك في *صفّي* — ترميم وتحسين الصور بالذكاء الاصطناعي.\n\n' +
+      'صورة قديمة؟ مشوّشة؟ ألوانها باهتة؟ ارفعها وتطلع أوضح بضغطة وحدة.\n\n' +
+      'خلّي أوريك شلون بثلاث خطوات 👇',
+    parse_mode: 'Markdown',
+    reply_markup: guideKeyboard(0, appUrl, startParameter),
   });
 }
 
@@ -58,16 +74,22 @@ export async function POST(request: Request) {
 
   try {
     const update = (await request.json()) as TelegramUpdate;
+
     if (update.message?.text?.startsWith('/start')) {
       await sendWelcome(token, appUrl, update.message);
+    } else if (update.message?.text?.startsWith('/help')) {
+      await sendStep(token, appUrl, update.message.chat.id, 0);
     }
-    if (update.callback_query?.message) {
-      await telegram(token, 'answerCallbackQuery', { callback_query_id: update.callback_query.id });
-      await telegram(token, 'sendMessage', {
-        chat_id: update.callback_query.message.chat.id,
-        text: 'ترفع الصورة، تختار إعداد سريع أو تضبط الأدوات بنفسك، وبعدها تنزّل النتيجة مباشرة. صورتك تبقى داخل متصفحك.',
-      });
+
+    if (update.callback_query) {
+      const query = update.callback_query;
+      await telegram(token, 'answerCallbackQuery', { callback_query_id: query.id });
+      const step = Number.parseInt(query.data?.split(':')[1] ?? '', 10);
+      if (query.message && Number.isInteger(step)) {
+        await sendStep(token, appUrl, query.message.chat.id, step);
+      }
     }
+
     return Response.json({ ok: true });
   } catch (error) {
     console.error(error);

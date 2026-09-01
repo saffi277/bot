@@ -18,7 +18,12 @@ if (!response.ok || !result.ok) throw new Error(`Webhook registration failed: ${
 await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ commands: [{ command: 'start', description: 'فتح محرر الصور' }] }),
+  body: JSON.stringify({
+    commands: [
+      { command: 'start', description: 'ابدأ من هنا' },
+      { command: 'help', description: 'كيف يشتغل صفّي' },
+    ],
+  }),
 });
 
 console.log(`Telegram webhook is ready at ${webhookUrl}`);

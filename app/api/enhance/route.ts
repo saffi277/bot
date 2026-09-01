@@ -1,0 +1,149 @@
+import { GeminiProvider } from '@/lib/enhance/gemini';
+import { EnhanceProvider, ProviderError } from '@/lib/enhance/provider';
+import { limits, peek, release, reserve, Subject } from '@/lib/ratelimit';
+import { record } from '@/lib/usage-log';
+
+/**
+ * The restoration endpoint.
+ *
+ * Order matters: identity, then limits, then the provider. The provider is
+ * never reached unless a unit has been reserved, which is what keeps the bill
+ * bounded (docs/ARCHITECTURE.md §1.6).
+ */
+
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
+
+function maxOutputEdge(): number {
+  const parsed = Number.parseInt(process.env.MAX_OUTPUT_EDGE ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2048;
+}
+
+let provider: EnhanceProvider | null = null;
+function getProvider(): EnhanceProvider {
+  if (!provider) provider = new GeminiProvider();
+  return provider;
+}
+
+/** Visitors are identified by IP until Telegram sign-in lands. */
+function identify(request: Request): Subject {
+  const forwarded = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for');
+  const ip = forwarded?.split(',')[0]?.trim();
+  return { kind: 'guest', id: ip || 'unknown' };
+}
+
+function fail(message: string, status: number, extra: Record<string, unknown> = {}) {
+  return Response.json({ error: message, ...extra }, { status });
+}
+
+/** Status probe: lets the page render an honest state before anyone uploads. */
+export async function GET(request: Request) {
+  const subject = identify(request);
+  const quota = await peek(subject);
+  return Response.json({
+    ready: getProvider().isConfigured() && quota.available,
+    configured: getProvider().isConfigured(),
+    storage: quota.available,
+    remaining: quota.remaining,
+    limit: quota.limit,
+    maxOutputEdge: maxOutputEdge(),
+    dailyCap: limits().global,
+  });
+}
+
+export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+  const subject = identify(request);
+  const subjectKey = `${subject.kind}:${subject.id}`;
+
+  const service = getProvider();
+  if (!service.isConfigured()) {
+    return fail('الخدمة لم تُفعَّل بعد. مفتاح النموذج غير مضبوط.', 503, { code: 'not_configured' });
+  }
+
+  let file: File | null = null;
+  try {
+    const form = await request.formData();
+    const value = form.get('image');
+    if (value instanceof File) file = value;
+  } catch {
+    return fail('تعذّرت قراءة الملف المرسل.', 400, { code: 'bad_request' });
+  }
+
+  if (!file) {
+    return fail('ما وصلتنا صورة. اختر صورة وحاول مرة ثانية.', 400, { code: 'no_file' });
+  }
+  if (!ACCEPTED.includes(file.type)) {
+    return fail('ندعم صور JPG وPNG وWebP فقط.', 415, { code: 'bad_type' });
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return fail('حجم الصورة كبير. المسموح حتى 12 ميغابايت.', 413, { code: 'too_large' });
+  }
+
+  // Reserve before any spending can happen.
+  const verdict = await reserve(subject);
+  if (!verdict.allowed) {
+    if (verdict.reason === 'unavailable') {
+      return fail('الخدمة تحت الصيانة حالياً. جرّب بعد شوي.', 503, { code: 'storage_unavailable' });
+    }
+    if (verdict.reason === 'global') {
+      return fail('وصلنا الحد اليومي للخدمة. جرّب باچر إن شاء الله.', 429, { code: 'daily_cap' });
+    }
+    return fail(
+      `خلص رصيدك اليوم (${verdict.limit} ${verdict.limit === 1 ? 'صورة' : 'صور'}). يتجدّد باچر.`,
+      429,
+      { code: 'quota', remaining: 0, limit: verdict.limit },
+    );
+  }
+
+  try {
+    const result = await service.enhance({
+      image: await file.arrayBuffer(),
+      inputContentType: file.type,
+      maxOutputEdge: maxOutputEdge(),
+      requestId,
+    });
+
+    await record({
+      requestId,
+      subject: subjectKey,
+      status: 'ok',
+      model: result.model,
+      outputMegapixels: result.outputMegapixels,
+      durationMs: result.durationMs,
+    });
+
+    return new Response(result.image, {
+      headers: {
+        'content-type': result.contentType,
+        'cache-control': 'no-store',
+        'x-request-id': requestId,
+        'x-duration-ms': String(result.durationMs),
+        'x-output-width': String(result.width),
+        'x-output-height': String(result.height),
+        'x-remaining': String(verdict.remaining),
+        'x-daily-limit': String(verdict.limit),
+      },
+    });
+  } catch (error) {
+    // The visitor never spent anything, so give the unit back.
+    await release(subject);
+
+    const isProviderError = error instanceof ProviderError;
+    const detail = error instanceof Error ? error.message : String(error);
+    await record({ requestId, subject: subjectKey, status: 'error', detail });
+
+    if (isProviderError && error.code === 'rejected') {
+      return fail('ما گدرنا نعالج هذي الصورة. جرّب صورة ثانية.', 422, { code: 'rejected' });
+    }
+    if (isProviderError && error.code === 'timeout') {
+      return fail('المعالجة أخذت وقت أطول من المتوقع. جرّب مرة ثانية.', 504, { code: 'timeout' });
+    }
+    if (isProviderError && error.code === 'no_image') {
+      return fail('النموذج ما رجّع صورة. جرّب مرة ثانية.', 502, { code: 'no_image' });
+    }
+
+    console.error(`[enhance:${requestId}]`, detail);
+    return fail('صار خلل أثناء المعالجة. رصيدك ما انخصم — جرّب مرة ثانية.', 502, { code: 'upstream' });
+  }
+}

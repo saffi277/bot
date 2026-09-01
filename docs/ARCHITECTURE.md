@@ -55,7 +55,7 @@ app/
 lib/
   enhance/
     provider.ts             الواجهة المجرّدة  ← نقطة العزل
-    fal.ts                  تطبيق المزوّد المُدار
+    gemini.ts               تطبيق Gemini عبر fetch
   ratelimit.ts              الحدود الثلاث + السقف الإجمالي
   usage-log.ts              تسجيل التكلفة والزمن في D1
   telegram.ts               مساعدات Telegram API
@@ -114,7 +114,7 @@ export interface EnhanceProvider {
   الفعلية ولا حسم قرار المعالجة غير المتزامنة.
 - أي فشل من المزوّد يُرمى كاستثناء؛ التعامل معه مسؤولية مسار الـ API.
 - **الطابور داخلي.** إن استخدم المزوّد طابوراً للطلبات الطويلة فذلك يبقى داخل
-  `lib/enhance/fal.ts`؛ العميل لا يرى حالة وظيفة إطلاقاً. راجع
+  `lib/enhance/gemini.ts`؛ العميل لا يرى حالة وظيفة إطلاقاً. راجع
   `DISCUSSION.md §8.4`.
 
 ### 3.1 سجلّ الاستخدام — إلزامي
@@ -225,7 +225,9 @@ lib/enhance/provider.ts
 | `APP_URL` | عنوان الموقع الذي يفتحه زر البوت |
 | `TELEGRAM_BOT_TOKEN` | توكن البوت من BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | سرّ التحقق من أن الطلب جاء من تلگرام فعلاً |
-| `ENHANCE_PROVIDER_KEY` | مفتاح مزوّد النماذج |
+| `GEMINI_API_KEY` | مفتاح النموذج. بدونه يعمل الموقع ويرفض المعالجة |
+| `ENHANCE_MODEL` | تجاوز اسم النموذج. الافتراضي `gemini-3.1-flash-image` |
+| `GEMINI_API_BASE` | تجاوز عنوان الواجهة — للاختبار أو لـVertex AI |
 | `MAX_OUTPUT_EDGE` | سقف الضلع الطويل للمُخرَج. الافتراضي `2048` |
 | `LIMIT_GUEST_DAILY` | حد الزائر غير المسجَّل. الافتراضي `3` |
 | `LIMIT_USER_DAILY` | حد حساب تلگرام. الافتراضي `5` |
