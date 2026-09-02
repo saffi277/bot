@@ -11,7 +11,8 @@
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:ratelimit": "node scripts/verify-rate-limit.mjs",
-    "quality": "node scripts/quality-report.mjs"
+    "quality": "node scripts/quality-report.mjs",
+    "bakeoff": "node scripts/model-bakeoff.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
