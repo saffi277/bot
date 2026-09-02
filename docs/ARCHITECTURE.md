@@ -225,6 +225,7 @@ lib/enhance/provider.ts
 | `APP_URL` | عنوان الموقع الذي يفتحه زر البوت |
 | `TELEGRAM_BOT_TOKEN` | توكن البوت من BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | سرّ التحقق من أن الطلب جاء من تلگرام فعلاً |
+| `TELEGRAM_SESSION_SECRET` | قيمة عشوائية بطول 32 حرفاً على الأقل لتوقيع كوكي تسجيل الدخول |
 | `GEMINI_API_KEY` | مفتاح النموذج. بدونه يعمل الموقع ويرفض المعالجة |
 | `ENHANCE_MODEL` | تجاوز اسم النموذج. الافتراضي `gemini-3.1-flash-image` |
 | `GEMINI_API_BASE` | تجاوز عنوان الواجهة — للاختبار أو لـVertex AI |

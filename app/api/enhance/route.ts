@@ -1,6 +1,7 @@
 import { GeminiProvider } from '@/lib/enhance/gemini';
 import { EnhanceProvider, ProviderError } from '@/lib/enhance/provider';
 import { limits, peek, release, reserve, Subject } from '@/lib/ratelimit';
+import { readTelegramSession } from '@/lib/telegram-auth';
 import { record } from '@/lib/usage-log';
 
 /**
@@ -27,7 +28,9 @@ function getProvider(): EnhanceProvider {
 
 /** Cloudflare's header is authoritative in production. x-forwarded-for is
  * accepted only for local development because it is otherwise spoofable. */
-function identify(request: Request): Subject {
+async function identify(request: Request): Promise<Subject> {
+  const identity = await readTelegramSession(request);
+  if (identity) return { kind: 'user', id: identity.id };
   const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
   const localIp = process.env.NODE_ENV === 'production'
     ? undefined
@@ -36,13 +39,18 @@ function identify(request: Request): Subject {
   return { kind: 'guest', id: ip || 'unknown' };
 }
 
+function referralFrom(request: Request): string | undefined {
+  const referral = request.headers.get('x-ref')?.trim();
+  return referral && /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(referral) ? referral.toLowerCase() : undefined;
+}
+
 function fail(message: string, status: number, extra: Record<string, unknown> = {}) {
   return Response.json({ error: message, ...extra }, { status });
 }
 
 /** Status probe: lets the page render an honest state before anyone uploads. */
 export async function GET(request: Request) {
-  const subject = identify(request);
+  const [subject, identity] = await Promise.all([identify(request), readTelegramSession(request)]);
   const quota = await peek(subject);
   return Response.json({
     ready: getProvider().isConfigured() && quota.available,
@@ -52,13 +60,16 @@ export async function GET(request: Request) {
     limit: quota.limit,
     maxOutputEdge: maxOutputEdge(),
     dailyCap: limits().global,
+    signedIn: Boolean(identity),
+    name: identity?.name,
   });
 }
 
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
-  const subject = identify(request);
+  const subject = await identify(request);
   const subjectKey = `${subject.kind}:${subject.id}`;
+  const referral = referralFrom(request);
 
   const service = getProvider();
   if (!service.isConfigured()) {
@@ -115,6 +126,7 @@ export async function POST(request: Request) {
       model: result.model,
       outputMegapixels: result.outputMegapixels,
       durationMs: result.durationMs,
+      referral,
     });
 
     return new Response(result.image, {
@@ -133,7 +145,7 @@ export async function POST(request: Request) {
     const isProviderError = error instanceof ProviderError;
     if (isProviderError && error.safeToRelease) await release(subject);
     const detail = error instanceof Error ? error.message : String(error);
-    await record({ requestId, subject: subjectKey, status: 'error', detail });
+    await record({ requestId, subject: subjectKey, status: 'error', detail, referral });
 
     if (isProviderError && error.code === 'rejected') {
       return fail('ما گدرنا نعالج هذي الصورة. رصيدك ما انخصم.', 422, { code: 'rejected' });

@@ -17,6 +17,7 @@ export type UsageRecord = {
   outputMegapixels?: number;
   durationMs?: number;
   detail?: string;
+  referral?: string;
 };
 
 export async function record(entry: UsageRecord): Promise<void> {
@@ -28,8 +29,8 @@ export async function record(entry: UsageRecord): Promise<void> {
     await store.db
       .prepare(
         `INSERT OR REPLACE INTO usage_log
-           (request_id, created_at, subject, model, output_megapixels, duration_ms, status, detail)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (request_id, created_at, subject, model, output_megapixels, duration_ms, status, detail, referral)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         entry.requestId,
@@ -40,6 +41,7 @@ export async function record(entry: UsageRecord): Promise<void> {
         entry.durationMs ?? null,
         entry.status,
         entry.detail?.slice(0, 500) ?? null,
+        entry.referral ?? null,
       )
       .run();
   } catch {

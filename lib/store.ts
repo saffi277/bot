@@ -59,11 +59,17 @@ export async function ensureSchema(store: Store): Promise<void> {
          output_megapixels REAL,
          duration_ms       INTEGER,
          status            TEXT NOT NULL,
-         detail            TEXT
+         detail            TEXT,
+         referral          TEXT
        )`,
     ),
     store.db.prepare(`CREATE INDEX IF NOT EXISTS usage_log_created_at ON usage_log (created_at)`),
   ]);
+  try {
+    await store.db.prepare('ALTER TABLE usage_log ADD COLUMN referral TEXT').run();
+  } catch (error) {
+    if (!String(error).toLowerCase().includes('duplicate column name')) throw error;
+  }
   schemaReady = true;
 }
 

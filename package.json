@@ -12,7 +12,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:ratelimit": "node scripts/verify-rate-limit.mjs",
     "quality": "node scripts/quality-report.mjs",
-    "bakeoff": "node scripts/model-bakeoff.mjs"
+    "bakeoff": "node scripts/model-bakeoff.mjs",
+    "test:telegram-auth": "tsc lib/telegram-auth.ts --outDir /tmp/saffi-telegram-auth-test --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck && TELEGRAM_AUTH_MODULE=/tmp/saffi-telegram-auth-test/telegram-auth.js node scripts/verify-telegram-auth.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
