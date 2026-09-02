@@ -24,43 +24,72 @@ const MAX_INPUT_BYTES = 15 * 1024 * 1024;
  * megapixels, and a modern phone photo sent at full size costs roughly fifteen
  * times a capped one (docs/DISCUSSION.md §3).
  */
-function prepare(file: File, maxEdge: number): Promise<{ blob: Blob; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
+async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; close(): void }> {
+  // createImageBitmap decodes off the main thread where it exists, which keeps
+  // a 12MP phone photo from freezing the page. Not every browser has it for
+  // every format, so the element path stays as a fallback.
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() };
+    } catch {
+      // Fall through: some browsers reject formats here that <img> still decodes.
+    }
+  }
 
-    image.onload = () => {
-      const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
-      const width = Math.max(1, Math.round(image.naturalWidth * scale));
-      const height = Math.max(1, Math.round(image.naturalHeight * scale));
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error('canvas'));
-        return;
-      }
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = 'high';
-      context.drawImage(image, 0, 0, width, height);
-      URL.revokeObjectURL(objectUrl);
-
-      canvas.toBlob(
-        (blob) => (blob ? resolve({ blob, width, height }) : reject(new Error('encode'))),
-        'image/jpeg',
-        0.92,
-      );
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('decode'));
+      element.src = objectUrl;
+    });
+    return {
+      source: image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      close: () => URL.revokeObjectURL(objectUrl),
     };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
 
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('decode'));
-    };
-    image.src = objectUrl;
-  });
+/**
+ * Downscaling before upload is not an optimisation — providers bill on output
+ * megapixels, and a modern phone photo sent at full size costs roughly fifteen
+ * times a capped one (docs/DISCUSSION.md §3).
+ *
+ * Re-encoding to JPEG here also means the server only ever receives JPEG,
+ * whatever the visitor picked. That is what makes accepting HEIC safe: iPhones
+ * shoot HEIC by default, and rejecting it at the picker turned away a large
+ * share of the audience for no reason.
+ */
+async function prepare(file: File, maxEdge: number): Promise<{ blob: Blob; width: number; height: number }> {
+  const decoded = await decode(file);
+  try {
+    const scale = Math.min(1, maxEdge / Math.max(decoded.width, decoded.height));
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('canvas');
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(decoded.source, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) throw new Error('encode');
+    return { blob, width, height };
+  } finally {
+    decoded.close();
+  }
 }
 
 function baseName(name: string): string {
@@ -400,7 +429,7 @@ export default function Home() {
             <button type="button" className="cta" onClick={() => fileInput.current?.click()} disabled={offline}>
               اختيار صورة
             </button>
-            <small className="drop-meta">JPG · PNG · WebP — حتى 15 ميغابايت</small>
+            <small className="drop-meta">JPG · PNG · WebP · HEIC — حتى 15 ميغابايت</small>
           </div>
         ) : (
           <div className="work">
@@ -503,7 +532,7 @@ export default function Home() {
           tabIndex={-1}
           aria-hidden="true"
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
           onChange={(event: ChangeEvent<HTMLInputElement>) => {
             accept(event.target.files?.[0]);
             event.target.value = '';

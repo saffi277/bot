@@ -4,6 +4,11 @@ import { getConfig, siteLink, telegram, TelegramMessage, TelegramUpdate } from '
  * The bot is an acquisition channel, not the product: it explains the service
  * once and hands the visitor to the site. It never receives or processes
  * images (docs/ARCHITECTURE.md §1.1).
+ *
+ * The link is a plain `url` button rather than a `web_app` one on purpose.
+ * Every visit ends in saving a file, and downloads inside a Mini App's
+ * embedded browser are unreliable across platforms; the external browser
+ * costs a little context and gets the photo onto the phone.
  */
 
 /** Three-step guide, walked with "next" buttons so nothing arrives as a wall of text. */

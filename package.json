@@ -10,7 +10,8 @@
     "build": "vinext build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test:ratelimit": "node scripts/verify-rate-limit.mjs"
+    "test:ratelimit": "node scripts/verify-rate-limit.mjs",
+    "quality": "node scripts/quality-report.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
