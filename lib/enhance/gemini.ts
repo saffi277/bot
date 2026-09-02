@@ -29,6 +29,7 @@ const RESTORE_PROMPT = [
   'Sharpen facial features, recover skin and hair texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
   'Preserve the identity of every person exactly: do not alter face shape, proportions, age, expression, or skin tone.',
   'Preserve the original composition, framing, pose, clothing and background.',
+  'If a detail is unclear, preserve the source rather than inventing a replacement.',
   'Do not add, remove or invent any object, person or body part that is not present in the original.',
   'Return only the restored photograph.',
 ].join(' ');
@@ -109,7 +110,7 @@ export class GeminiProvider implements EnhanceProvider {
 
   async enhance(request: EnhanceRequest): Promise<EnhanceResult> {
     if (!this.apiKey) {
-      throw new ProviderError('GEMINI_API_KEY is not set.', 'not_configured', 503);
+      throw new ProviderError('GEMINI_API_KEY is not set.', 'not_configured', 503, true);
     }
 
     const startedAt = Date.now();
@@ -161,13 +162,14 @@ export class GeminiProvider implements EnhanceProvider {
         `Model returned ${response.status}: ${detail.slice(0, 400)}`,
         'upstream',
         response.status === 429 ? 429 : 502,
+        response.status >= 400 && response.status < 500,
       );
     }
 
     const payload = (await response.json()) as GeminiResponse;
 
     if (payload.promptFeedback?.blockReason) {
-      throw new ProviderError(`Blocked: ${payload.promptFeedback.blockReason}`, 'rejected', 422);
+      throw new ProviderError(`Blocked: ${payload.promptFeedback.blockReason}`, 'rejected', 422, true);
     }
 
     const parts = payload.candidates?.[0]?.content?.parts ?? [];

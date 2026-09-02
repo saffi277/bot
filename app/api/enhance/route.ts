@@ -25,10 +25,14 @@ function getProvider(): EnhanceProvider {
   return provider;
 }
 
-/** Visitors are identified by IP until Telegram sign-in lands. */
+/** Cloudflare's header is authoritative in production. x-forwarded-for is
+ * accepted only for local development because it is otherwise spoofable. */
 function identify(request: Request): Subject {
-  const forwarded = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for');
-  const ip = forwarded?.split(',')[0]?.trim();
+  const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
+  const localIp = process.env.NODE_ENV === 'production'
+    ? undefined
+    : request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = cloudflareIp || localIp;
   return { kind: 'guest', id: ip || 'unknown' };
 }
 
@@ -126,24 +130,28 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    // The visitor never spent anything, so give the unit back.
-    await release(subject);
-
     const isProviderError = error instanceof ProviderError;
+    if (isProviderError && error.safeToRelease) await release(subject);
     const detail = error instanceof Error ? error.message : String(error);
     await record({ requestId, subject: subjectKey, status: 'error', detail });
 
     if (isProviderError && error.code === 'rejected') {
-      return fail('ما گدرنا نعالج هذي الصورة. جرّب صورة ثانية.', 422, { code: 'rejected' });
+      return fail('ما گدرنا نعالج هذي الصورة. رصيدك ما انخصم.', 422, { code: 'rejected' });
     }
     if (isProviderError && error.code === 'timeout') {
-      return fail('المعالجة أخذت وقت أطول من المتوقع. جرّب مرة ثانية.', 504, { code: 'timeout' });
+      return fail('المعالجة أخذت وقت أطول من المتوقع. نحتفظ بالحجز حمايةً من تكرار كلفة محتملة.', 504, { code: 'timeout' });
     }
     if (isProviderError && error.code === 'no_image') {
-      return fail('النموذج ما رجّع صورة. جرّب مرة ثانية.', 502, { code: 'no_image' });
+      return fail('النموذج ما رجّع صورة. نحتفظ بالحجز لأن الطلب قد يكون احتُسب.', 502, { code: 'no_image' });
     }
 
     console.error(`[enhance:${requestId}]`, detail);
-    return fail('صار خلل أثناء المعالجة. رصيدك ما انخصم — جرّب مرة ثانية.', 502, { code: 'upstream' });
+    return fail(
+      isProviderError && error.safeToRelease
+        ? 'صار خلل قبل المعالجة. رصيدك ما انخصم.'
+        : 'صار خلل أثناء المعالجة. احتفظنا بالحجز حمايةً من كلفة محتملة.',
+      502,
+      { code: 'upstream' },
+    );
   }
 }

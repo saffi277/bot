@@ -49,6 +49,8 @@ export class ProviderError extends Error {
     message: string,
     readonly code: 'not_configured' | 'rejected' | 'no_image' | 'upstream' | 'timeout',
     readonly status = 502,
+    /** True only when the upstream rejected before doing model work. */
+    readonly safeToRelease = false,
   ) {
     super(message);
     this.name = 'ProviderError';
