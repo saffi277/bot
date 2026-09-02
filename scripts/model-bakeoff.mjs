@@ -30,14 +30,25 @@ const CATALOGUE = {
   'gemini-3-pro-image': { price: 0.134, note: 'الأقوى للوجوه · بلا طبقة مجانية' },
 };
 
+/**
+ * Kept in step with lib/enhance/gemini.ts so the comparison reflects what the
+ * product will actually send.
+ *
+ * The earlier wording told the model to preserve the source wherever detail
+ * was unclear, which on a photograph missing a third of its emulsion means
+ * leaving the holes — no restoration at all. It only produced a good result by
+ * disobeying. The distinction that matters is not whether the model invents,
+ * but what it is allowed to invent: physical damage may be reconstructed from
+ * what surrounds it, a face may not.
+ */
 const RESTORE_PROMPT = [
   'Restore and enhance this photograph.',
-  'Sharpen facial features, recover skin and hair texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
-  'Preserve the identity of every person exactly: do not alter face shape, proportions, age, expression, or skin tone.',
+  'Sharpen detail, recover skin, hair and fabric texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
+  'Repair physical damage — tears, cracks, missing emulsion, scratches, stains, fading — by reconstructing what the surrounding image implies.',
+  'Never reconstruct a face: if facial detail is lost, leave it soft rather than inventing features. The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, or skin tone.',
   'Preserve the original composition, framing, pose, clothing and background.',
-  'If a detail is unclear, preserve the source rather than inventing a replacement.',
-  'Do not add, remove or invent any object, person or body part that is not present in the original.',
-  'Return only the restored photograph.',
+  'Do not add objects, people or elements that the original does not imply.',
+  'Return only the restored photograph, with no added border, frame, margin, watermark, signature or decoration, and keep the original framing and aspect ratio.',
 ].join(' ');
 
 function arg(name, fallback) {

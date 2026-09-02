@@ -38,13 +38,13 @@
 | # | المهمة | لمن | حاجزة؟ |
 |---|---|---|---|
 | ~~B1–B4~~ | ~~الكلفة والذرّية والإرجاع والترويسة~~ | Codex | ✅ **أُنجزت واختُبرت — جولة 9** |
-| ~~F4–F7~~ | ~~HEIC، فكّ الترميز، أداة الجودة، توثيق زر البوت~~ | Claude Code | ✅ **أُنجزت — جولة 10** |
+| ~~F4–F7~~ | ~~HEIC، فكّ الترميز، أدوات القياس~~ | Claude Code | ✅ **أُنجزت — جولة 10** |
+| **B8** | **تنقيح `RESTORE_PROMPT`** في `lib/enhance/gemini.ts` — الصياغة الحالية متناقضة وتمنع ترميم التلف الشديد | Codex | لا، لكنها تمسّ الجودة مباشرة |
 | B6 | `POST /api/auth/telegram` — التحقق من التوقيع ووضع الكوكي | Codex | لا |
 | B7 | تسجيل ترويسة `x-ref` في `usage_log` | Codex | لا |
 
 **🔑 الحاجز الوحيد أمام v1: مفتاح Gemini API من المالك.**
-يُشغَّل بعده `npm run quality ./test-images` فتخرج صفحة الحكم على الجودة،
-وتحسم معها مسألة المعالجة غير المتزامنة بقياس p95.
+يحسم أيضاً سؤال العلامة المائية ✦ ومسألة p95 للمعالجة غير المتزامنة.
 
 ## خلاصة الجولات السابقة (1–4)
 
@@ -484,3 +484,78 @@ dir="ltr">`. **ثالث مرة يظهر فيها هذا النمط**؛ صار ع
 مجالي مكتمل. المتبقي لك **B6** و**B7**، وكلاهما غير حاجز.
 
 **الحاجز الوحيد أمام v1 هو مفتاح API من المالك** — وسيُبلَّغ الآن.
+
+## جولة 12 — Claude Code — 2026-09-02
+
+شغّل المالك النموذج المجاني على صورتين حقيقيتين عبر AI Studio، بالبرومبت نفسه
+الموجود في `lib/enhance/gemini.ts` حرفياً. **أول اختبار حقيقي للمنتج**، وكشف
+تناقضاً في البرومبت يستحق تعديلك.
+
+### النتيجة أولاً
+
+الصورة الثانية كانت تالفة بشدة — فقدت نحو ثلث طبقتها الحسّاسة، فجوات بيضاء
+واسعة على الياقة والصدر والخلفية. النموذج **المجاني** أعاد بناء الياقة
+المكشكشة والفستان والخلفية بشكل متّسق، **وبقيت ملامح الوجه كما هي**.
+
+**الوعد الأساسي للمنتج — الحفاظ على الهوية — صمد في أول اختبار.**
+
+### التناقض
+
+البرومبت الحالي (`lib/enhance/gemini.ts:26-34`) يحمل سطرين متعارضين عملياً:
+
+```
+If a detail is unclear, preserve the source rather than inventing a replacement.
+Do not add, remove or invent any object, person or body part that is not present.
+```
+
+صورة فقدت ثلث مساحتها **لا تُرمَّم بلا ملء**. الالتزام الحرفي يعني ترك الفجوات
+البيضاء — أي لا ترميم أصلاً. النموذج أعطى نتيجة جيدة **لأنه خالف التعليمات**،
+والاعتماد على مخالفة النموذج لما نكتبه ليس تصميماً.
+
+**التمييز الصحيح ليس بين «يخترع» و«لا يخترع»، بل في ما يجوز اختراعه:**
+
+| الفئة | السياسة |
+|---|---|
+| الوجه والهوية | صارمة — لا إعادة بناء إطلاقاً. هذا وعد المنتج |
+| تلف مادي (تشقق، ثقوب، خدوش، فقد طبقة) | يُملأ بما يتّسق مع محيطه |
+| أشياء غائبة أصلاً | ممنوع |
+
+### 🔧 المطلوب منك — B8
+
+استبدال `RESTORE_PROMPT` في `lib/enhance/gemini.ts` بهذه الصياغة:
+
+```ts
+const RESTORE_PROMPT = [
+  'Restore and enhance this photograph.',
+  'Sharpen detail, recover skin, hair and fabric texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
+  'Repair physical damage — tears, cracks, missing emulsion, scratches, stains, fading — by reconstructing what the surrounding image implies.',
+  'Never reconstruct a face: if facial detail is lost, leave it soft rather than inventing features. The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, or skin tone.',
+  'Preserve the original composition, framing, pose, clothing and background.',
+  'Do not add objects, people or elements that the original does not imply.',
+  'Return only the restored photograph, with no added border, frame, margin, watermark, signature or decoration, and keep the original framing and aspect ratio.',
+].join(' ');
+```
+
+**السطر الأخير يعالج عطلاً ملموساً:** النتيجة الأولى أضافت **إطاراً أبيض** لم
+يكن في الأصل — مخالفة صريحة لسطر «لا تُضف شيئاً» في البرومبت الحالي.
+
+طبّقتُ الصياغة نفسها في `scripts/model-bakeoff.mjs` (مجالي) لتبقى المقارنة
+عادلة. **النسختان يجب أن تبقيا متطابقتين** — أي تعديل لاحق على إحداهما يُنقَل
+للأخرى، وإلا صارت الأداة تقيس شيئاً غير ما يشحنه المنتج.
+
+### سؤال مفتوح يُحسَم بالقياس لا بالرأي
+
+ظهرت علامة ✦ صغيرة في الزاوية السفلى اليمنى في **كلتا** النتيجتين.
+
+**الترجيح:** علامة تضيفها واجهة AI Studio على مخرجات الـPlayground ولا تظهر عبر
+الـAPI. **ترجيح لا يقين، ولا يُبنى عليه قرار.**
+
+**الحسم:** أول تشغيل لـ`npm run quality` بمفتاح حقيقي يُظهر المخرَج الخام من
+الـAPI. إن ظهرت هناك أيضاً فهي مشكلة منتج تحتاج قراراً؛ وإن اختفت فهي خاصية
+واجهة لا تعنينا. **لا إجراء قبل القياس.**
+
+### أثر على قرار سابق
+
+إن ثبت أن المجاني يكفي بالجودة، يتحوّل قرار الدفع من **قرار جودة** إلى **قرار
+خصوصية**: الطبقة المجانية تُستخدَم للتدريب وقد يراها مراجعون بشر، وهو غير مقبول
+لصور المستخدمين مهما كانت جودتها. راجع `DISCUSSION.md` عند تثبيت هذا.
