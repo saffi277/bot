@@ -350,7 +350,7 @@ export default function Home() {
   const offline = service !== null && !service.ready;
 
   return (
-    <main>
+    <main className="site-shell">
       <header className="bar">
         <a className="brand" href="#top">
           <span className="brand-mark" aria-hidden="true">
@@ -360,14 +360,20 @@ export default function Home() {
               <rect x="2.6" y="3.6" width="18.8" height="16.8" rx="3.4" strokeWidth="1.5" />
             </svg>
           </span>
-          <span className="brand-name">صفّي</span>
+          <span className="brand-lockup">
+            <span className="brand-name">صفّي</span>
+            <span className="brand-sub">مختبر ترميم الصور</span>
+          </span>
         </a>
         <div className="bar-side">
           <a className="bar-link" href="#how">كيف يشتغل</a>
           {service?.storage && (
             <span className={service.signedIn ? 'quota is-user' : 'quota'} title="رصيدك اليوم">
-              <b>{service.remaining}</b>
-              <span>/{service.limit} اليوم</span>
+              <bdi dir="ltr">
+                <b>{service.remaining}</b>
+                <span>/{service.limit}</span>
+              </bdi>
+              <span> اليوم</span>
             </span>
           )}
           {service?.signedIn && service.name ? (
@@ -381,15 +387,26 @@ export default function Home() {
       </header>
 
       <section className="hero" id="top">
-        <p className="eyebrow">ترميم وتحسين تلقائي بالذكاء الاصطناعي</p>
-        <h1>
-          صورة قديمة أو مشوّشة؟
-          <em>خلّيها واضحة.</em>
-        </h1>
-        <p className="lede">
-          ارفع صورتك ويشتغل عليها الذكاء الاصطناعي تلقائياً — يشدّ ملامح الوجه، يرجّع تفاصيل الجلد والشعر،
-          يشيل التشويش، ويصلّح الألوان الباهتة. بضغطة وحدة، بلا أدوات ولا خبرة.
-        </p>
+        <div className="hero-copy">
+          <p className="eyebrow"><span aria-hidden="true" /> ترميم وتحسين تلقائي بالذكاء الاصطناعي</p>
+          <h1>
+            لا تخلي الذكرى
+            <em>تضيع بالتشويش.</em>
+          </h1>
+          <p className="lede">
+            ارفع الصورة، وصفّي يتكفّل بالباقي: تفاصيل أوضح، ألوان أهدأ، ونتيجة جاهزة للحفظ — بلا إعدادات ولا تعب.
+          </p>
+          <a className="hero-cta" href="#studio">ابدأ بالصورة <span aria-hidden="true">↙</span></a>
+        </div>
+        <div className="hero-visual" aria-hidden="true">
+          <span className="orbital orbital-one">وضوح</span>
+          <span className="orbital orbital-two">تفاصيل</span>
+          <div className="scan-card">
+            <div className="scan-line" />
+            <span>AI</span>
+            <small>RESTORE</small>
+          </div>
+        </div>
       </section>
 
       <section className="studio" id="studio">
