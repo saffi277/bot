@@ -10,13 +10,33 @@
  */
 
 import { createHash, createHmac } from 'node:crypto';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const BOT_TOKEN = 'test-bot-token-000';
 const OTHER_TOKEN = 'a-different-bot-token';
 const SESSION_SECRET = 'session-secret-at-least-32-characters';
 const OTHER_SESSION_SECRET = 'a-different-session-secret-value-xx';
 
-const { issueCookie, readCookie, verifyLogin } = await import('../lib/telegram-auth.ts');
+/**
+ * Loads the module under test without depending on --experimental-strip-types:
+ * that flag needs a Node build carrying the TypeScript parser, and the same
+ * v22 line ships both with and without it, so the test silently became
+ * unrunnable for anyone on the wrong build. TypeScript is already a
+ * devDependency, so transpiling here works on every Node that can run the app.
+ */
+const here = dirname(fileURLToPath(import.meta.url));
+const source = readFileSync(join(here, '..', 'lib', 'telegram-auth.ts'), 'utf8');
+const js = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const compiled = join(mkdtempSync(join(tmpdir(), 'auth-')), 'telegram-auth.mjs');
+writeFileSync(compiled, js);
+
+const { issueCookie, readCookie, verifyLogin } = await import(pathToFileURL(compiled).href);
 
 /** Signs a login payload exactly as Telegram does, so valid cases are real. */
 function sign(fields, token) {

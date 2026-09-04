@@ -50,6 +50,14 @@ const MANAGED = [
     value: 'http://localhost:3000',
     note: 'غيّره إلى عنوان الموقع بعد النشر',
   },
+  {
+    key: 'GEMINI_API_KEY',
+    value: '',
+    // Written blank on purpose. Omitting the line entirely made a filled file
+    // look complete while the site still reported itself unconfigured, with
+    // nothing on screen to say which key was missing.
+    note: 'اختياري الآن — مطلوب لتشغيل الترميم فعلياً. الموقع يعمل بدونه ويعلن أنه تحت التجهيز',
+  },
 ];
 
 /** Reads existing assignments so nothing already set is clobbered. */
@@ -98,9 +106,16 @@ writeFileSync(target, lines.join('\n'));
 console.log('\n✅ كُتب .env.local\n');
 if (filled.length) console.log(`   وُلِّد تلقائياً: ${filled.join(' · ')}`);
 if (kept.length) console.log(`   بقي كما هو:    ${kept.join(' · ')}`);
-if (blank.length) {
-  console.log(`\n⚠️  ينقصه منك: ${blank.join(' · ')}`);
+// GEMINI_API_KEY is separated out: it is not a launch blocker like the others,
+// and listing it beside them would make the bot look unlaunchable without it.
+const required = blank.filter((key) => key !== 'GEMINI_API_KEY');
+if (required.length) {
+  console.log(`\n⚠️  ينقصه منك: ${required.join(' · ')}`);
   console.log('   افتح .env.local وألصق القيمة أمام كل واحد.');
+}
+if (blank.includes('GEMINI_API_KEY')) {
+  console.log('\n💡 GEMINI_API_KEY تُرك فارغاً — البوت والموقع يعملان بدونه،');
+  console.log('   والموقع يعلن أنه «تحت التجهيز» حتى تضعه.');
 }
 console.log('\n   الملف محمي بـ .gitignore — لن يُرفع إلى الگت.');
 console.log('   بعد تعبئته:  npm run dev\n');
