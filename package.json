@@ -14,7 +14,8 @@
     "test:auth": "node --experimental-strip-types scripts/verify-telegram-auth.mjs",
     "quality": "node scripts/quality-report.mjs",
     "bakeoff": "node scripts/model-bakeoff.mjs",
-    "bot:doctor": "node scripts/bot-doctor.mjs"
+    "bot:doctor": "node scripts/bot-doctor.mjs",
+    "setup:env": "node scripts/setup-env.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
