@@ -13,7 +13,9 @@ import { record } from '@/lib/usage-log';
  * bounded (docs/ARCHITECTURE.md §1.6).
  */
 
-const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+// Matches the ceiling the page and the bot both advertise. It disagreed at 12
+// before, so a size the product promised to accept was refused by the server.
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
 
 function maxOutputEdge(): number {
@@ -35,8 +37,8 @@ function getProvider(): EnhanceProvider {
  * accepted only in development because it is otherwise spoofable.
  */
 async function identify(request: Request): Promise<{ subject: Subject; identity: TelegramIdentity | null }> {
-  const { token } = getConfig();
-  const identity = token ? await readCookie(request, token) : null;
+  const { sessionSecret } = getConfig();
+  const identity = sessionSecret ? await readCookie(request, sessionSecret) : null;
   if (identity) return { subject: { kind: 'user', id: identity.id }, identity };
 
   const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
     return fail('ندعم صور JPG وPNG وWebP فقط.', 415, { code: 'bad_type' });
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return fail('حجم الصورة كبير. المسموح حتى 12 ميغابايت.', 413, { code: 'too_large' });
+    return fail('حجم الصورة كبير. المسموح حتى ١٥ ميغابايت.', 413, { code: 'too_large' });
   }
 
   // Reserve before any spending can happen.

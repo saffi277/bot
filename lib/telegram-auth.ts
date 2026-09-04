@@ -7,9 +7,13 @@
  * forged or replayed payload must be rejected on our side — nothing upstream
  * will do it for us.
  *
- * The cookie carries the identity onward. It is signed with the same secret
- * rather than encrypted: its contents are not sensitive (a Telegram id and a
- * first name), but they must not be editable by the person holding them.
+ * The cookie carries the identity onward. It is signed rather than encrypted:
+ * its contents are not sensitive (a Telegram id and a first name), but they
+ * must not be editable by the person holding them.
+ *
+ * Its key is TELEGRAM_SESSION_SECRET, not the bot token. Signing sessions with
+ * the token meant rotating the token silently signed every visitor out, and it
+ * made one key serve both Telegram's verification scheme and ours.
  */
 
 const COOKIE = 'saffi_tg';
@@ -96,14 +100,14 @@ export async function verifyLogin(payload: LoginPayload, botToken: string): Prom
 }
 
 /** Signs the identity so the cookie cannot be edited by its holder. */
-export async function issueCookie(identity: TelegramIdentity, botToken: string): Promise<string> {
+export async function issueCookie(identity: TelegramIdentity, sessionSecret: string): Promise<string> {
   const body = JSON.stringify({
     id: identity.id,
     name: identity.name,
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   });
   const value = encodeBase64(body);
-  const signature = await hmacHex(encoder.encode(botToken), value);
+  const signature = await hmacHex(encoder.encode(sessionSecret), value);
   const cookie = `${value}.${signature}`;
 
   return [
@@ -117,7 +121,7 @@ export async function issueCookie(identity: TelegramIdentity, botToken: string):
 }
 
 /** Reads the identity back, or null when the cookie is absent, edited or expired. */
-export async function readCookie(request: Request, botToken: string): Promise<TelegramIdentity | null> {
+export async function readCookie(request: Request, sessionSecret: string): Promise<TelegramIdentity | null> {
   const header = request.headers.get('cookie');
   if (!header) return null;
 
@@ -131,7 +135,7 @@ export async function readCookie(request: Request, botToken: string): Promise<Te
   const [value, signature] = raw.split('.');
   if (!value || !signature) return null;
 
-  const expected = await hmacHex(encoder.encode(botToken), value);
+  const expected = await hmacHex(encoder.encode(sessionSecret), value);
   if (!equal(expected, signature)) return null;
 
   try {

@@ -14,10 +14,18 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
 const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
 const username = process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, '');
+const sessionSecret = process.env.TELEGRAM_SESSION_SECRET;
 const api = process.env.TELEGRAM_API_BASE || 'https://api.telegram.org/bot';
 
 const rows = [];
 const note = (ok, label, detail, fix) => rows.push({ ok, label, detail, fix });
+
+/**
+ * Arabic-Indic digits. A Latin number sitting inside an Arabic sentence gets
+ * reordered by the bidi algorithm in some terminals, which is how "٣٢٠×٢٤٠"
+ * once rendered backwards. Every number this tool prints goes through here.
+ */
+const num = (value) => String(value).replace(/[0-9]/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
 
 async function call(method) {
   const response = await fetch(`${api}${token}/${method}`);
@@ -66,17 +74,32 @@ if (!token) {
         'تلگرام يصل إلينا لكن المسار يرفض — راجع السر والنشر');
     }
     if (hook.pending_update_count > 0) {
-      note(false, 'رسائل معلّقة', `${hook.pending_update_count} لم تُسلَّم`,
+      note(false, 'رسائل معلّقة', `${num(hook.pending_update_count)} لم تُسلَّم`,
         'الموقع لا يستجيب — تأكد أنه منشور ويعمل');
     }
 
     note(Boolean(hook.has_custom_certificate) === false, 'الشهادة', 'قياسية', null);
 
     if (!secret) {
-      note(false, 'سر الويبهوك', 'غير مضبوط',
-        'أي جهة تعرف العنوان تقدر ترسل تحديثات مزوّرة — اضبط TELEGRAM_WEBHOOK_SECRET');
+      note(false, 'سر الويبهوك', 'غير مضبوط — الويبهوك يرفض كل تحديث',
+        'اضبط TELEGRAM_WEBHOOK_SECRET بنفس القيمة المسجَّلة، وإلا لن يرد البوت إطلاقاً');
     } else {
       note(true, 'سر الويبهوك', 'مضبوط', null);
+    }
+
+    // Its own key on purpose: signing sessions with the bot token means
+    // rotating the token silently signs every visitor out.
+    if (!sessionSecret) {
+      note(false, 'سر الجلسة', 'غير مضبوط — الدخول بتلگرام معطّل',
+        'اضبط TELEGRAM_SESSION_SECRET (٣٢ حرفاً عشوائياً على الأقل، وليس التوكن). الموقع يشتغل بوضع الزائر حتى تضبطه');
+    } else if (sessionSecret === token) {
+      note(false, 'سر الجلسة', 'مطابق لتوكن البوت',
+        'اجعله قيمة مستقلة — تدوير التوكن بخلاف ذلك يطرد كل المستخدمين');
+    } else if (sessionSecret.length < 32) {
+      note(false, 'سر الجلسة', `قصير (${num(sessionSecret.length)} حرفاً)`,
+        'استعمل ٣٢ حرفاً عشوائياً على الأقل');
+    } else {
+      note(true, 'سر الجلسة', 'مضبوط ومستقل عن التوكن', null);
     }
 
     const commands = await call('getMyCommands');
@@ -108,5 +131,5 @@ for (const row of rows) {
 
 const failed = rows.filter((r) => !r.ok).length;
 console.log('─'.repeat(46));
-console.log(failed ? `❌ ${failed} مشكلة تمنع البوت من العمل` : '✅ البوت جاهز — جرّب /start');
+console.log(failed ? `❌ ${num(failed)} مشكلة تمنع الإطلاق` : '✅ البوت جاهز — جرّب /start');
 process.exit(failed ? 1 : 0);

@@ -18,13 +18,16 @@ function redirect(appUrl: string, cookie?: string, error?: string) {
 }
 
 async function handle(request: Request, payload: LoginPayload) {
-  const { token, appUrl } = getConfig();
-  if (!token) return redirect(appUrl, undefined, 'not_configured');
+  const { token, appUrl, sessionSecret } = getConfig();
+  // Without either key there is no session to issue, so sign-in stays off and
+  // the visitor falls back to guest mode rather than getting a cookie we
+  // cannot verify later.
+  if (!token || !sessionSecret) return redirect(appUrl, undefined, 'not_configured');
 
   const identity = await verifyLogin(payload, token);
   if (!identity) return redirect(appUrl, undefined, 'invalid');
 
-  return redirect(appUrl, await issueCookie(identity, token));
+  return redirect(appUrl, await issueCookie(identity, sessionSecret));
 }
 
 export async function GET(request: Request) {

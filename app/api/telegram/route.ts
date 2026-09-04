@@ -15,12 +15,12 @@ import { getConfig, siteLink, telegram, TelegramMessage, TelegramUpdate } from '
 const GUIDE = [
   {
     title: '١ · ارفع صورتك',
-    body: 'افتح الموقع واسحب الصورة، أو الصقها، أو اختَرها من جهازك.\n\nندعم JPG وPNG وWebP حتى 15 ميغابايت.',
+    body: 'افتح الموقع واسحب الصورة، أو الصقها، أو اختَرها من جهازك.\n\nندعم JPG وPNG وWebP وHEIC (صيغة الآيفون) حتى ١٥ ميغابايت.',
     next: 'وبعدين؟ ←',
   },
   {
     title: '٢ · يشتغل عليها تلقائياً',
-    body: 'الذكاء الاصطناعي يشدّ ملامح الوجه، يرجّع تفاصيل الجلد والشعر، يشيل التشويش، ويصلّح الألوان الباهتة.\n\nبلا أدوات ولا ضبط يدوي — تأخذ عادةً بين 5 و20 ثانية.',
+    body: 'الذكاء الاصطناعي يشدّ ملامح الوجه، يرجّع تفاصيل الجلد والشعر، يشيل التشويش، ويصلّح الألوان الباهتة.\n\nبلا أدوات ولا ضبط يدوي — تأخذ عادةً بين ٥ و٢٠ ثانية.',
     next: 'وبعدها؟ ←',
   },
   {
@@ -89,7 +89,12 @@ export async function GET() {
 export async function POST(request: Request) {
   const { token, secret, appUrl } = getConfig();
   if (!token) return Response.json({ error: 'Telegram bot is not configured yet.' }, { status: 503 });
-  if (secret && request.headers.get('x-telegram-bot-api-secret-token') !== secret) {
+
+  // A missing secret is an unconfigured bot, not an open door: without this
+  // the check below was skipped entirely and anyone who learned the URL could
+  // drive the bot. Fail closed, like every other gate here (CLAUDE.md §6).
+  if (!secret) return Response.json({ error: 'Telegram bot is not configured yet.' }, { status: 503 });
+  if (request.headers.get('x-telegram-bot-api-secret-token') !== secret) {
     return Response.json({ error: 'Unauthorized webhook request.' }, { status: 401 });
   }
 
@@ -114,7 +119,10 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true });
   } catch (error) {
-    console.error(error);
-    return Response.json({ error: 'Unable to process Telegram update.' }, { status: 500 });
+    // Telegram redelivers an update we answer with 5xx, so a half-sent guide
+    // arrives twice. Redelivery cannot fix a failed sendMessage, so the update
+    // is acknowledged and the failure is left in the logs instead.
+    console.error('Telegram update failed', error);
+    return Response.json({ ok: true, handled: false });
   }
 }

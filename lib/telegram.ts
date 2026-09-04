@@ -21,6 +21,13 @@ export type TelegramConfig = {
   appUrl: string;
   /** Public bot handle, needed by the Telegram Login widget on the page. */
   botUsername: string | undefined;
+  /**
+   * Signs our own session cookie. Deliberately not the bot token: rotating the
+   * token would otherwise sign every visitor out, and one key should not serve
+   * two unrelated purposes. Unset means sign-in stays off and the site runs in
+   * guest mode, which is a supported state.
+   */
+  sessionSecret: string | undefined;
 };
 
 export function getConfig(): TelegramConfig {
@@ -29,6 +36,7 @@ export function getConfig(): TelegramConfig {
     secret: process.env.TELEGRAM_WEBHOOK_SECRET,
     appUrl: (process.env.APP_URL || 'https://saffi277-bot-photo.koorymoe.chatgpt.site').replace(/\/$/, ''),
     botUsername: process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, ''),
+    sessionSecret: process.env.TELEGRAM_SESSION_SECRET || undefined,
   };
 }
 
