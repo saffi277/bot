@@ -20,18 +20,25 @@ const DEFAULT_MODEL = 'gemini-3.1-flash-image';
 const REQUEST_TIMEOUT_MS = 90_000;
 
 /**
- * The instruction is deliberately conservative. The product promise is
- * restoration, not reinvention: a face that comes back sharper must still be
- * the same person, and nothing absent from the original may be invented.
+ * The first real test showed the earlier wording contradicted itself: it asked
+ * the model to preserve the source wherever detail was unclear, which on a
+ * photograph missing a third of its emulsion means leaving the holes — no
+ * restoration at all. It produced a good result only by disobeying.
+ *
+ * The line that matters is not whether the model invents, but what it may
+ * invent. Physical damage is reconstructed from what surrounds it; a face
+ * never is, because a rebuilt face is a different person and that breaks the
+ * whole promise. Kept identical to the copy in scripts/model-bakeoff.mjs so
+ * the comparison measures what actually ships.
  */
 const RESTORE_PROMPT = [
   'Restore and enhance this photograph.',
-  'Sharpen facial features, recover skin and hair texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
-  'Preserve the identity of every person exactly: do not alter face shape, proportions, age, expression, or skin tone.',
+  'Sharpen detail, recover skin, hair and fabric texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
+  'Repair physical damage — tears, cracks, missing emulsion, scratches, stains, fading — by reconstructing what the surrounding image implies.',
+  'Never reconstruct a face: if facial detail is lost, leave it soft rather than inventing features. The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, or skin tone.',
   'Preserve the original composition, framing, pose, clothing and background.',
-  'If a detail is unclear, preserve the source rather than inventing a replacement.',
-  'Do not add, remove or invent any object, person or body part that is not present in the original.',
-  'Return only the restored photograph.',
+  'Do not add objects, people or elements that the original does not imply.',
+  'Return only the restored photograph, with no added border, frame, margin, watermark, signature or decoration, and keep the original framing and aspect ratio.',
 ].join(' ');
 
 type GeminiPart = {

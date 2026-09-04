@@ -29,8 +29,15 @@
 
 ## نطاقك
 
-راجع `docs/ARCHITECTURE.md §6` لتقسيم الملكية. لا تعدّل ملفاً خارج نطاقك بدون
-تنسيق عبر Issue أو PR.
+**بُدِّل التقسيم بقرار المالك (2026-09-04):**
+
+| المجال | المالك |
+|---|---|
+| الباك-إند والبوت — `app/api/**`, `lib/**`, `telegram-bot/**` | **Claude Code** |
+| الواجهة والتصميم — `app/page.tsx`, `app/layout.tsx`, `app/globals.css`, `public/**` | **Codex** |
+
+راجع `docs/ARCHITECTURE.md §6`. لا تعدّل ملفاً خارج نطاقك بدون تنسيق عبر
+`docs/REVIEW.md`.
 
 ## المشاركة في النقاش — `docs/REVIEW.md`
 

@@ -12,7 +12,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:ratelimit": "node scripts/verify-rate-limit.mjs",
     "quality": "node scripts/quality-report.mjs",
-    "bakeoff": "node scripts/model-bakeoff.mjs"
+    "bakeoff": "node scripts/model-bakeoff.mjs",
+    "bot:doctor": "node scripts/bot-doctor.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

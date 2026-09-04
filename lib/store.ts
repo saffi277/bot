@@ -59,11 +59,21 @@ export async function ensureSchema(store: Store): Promise<void> {
          output_megapixels REAL,
          duration_ms       INTEGER,
          status            TEXT NOT NULL,
-         detail            TEXT
+         detail            TEXT,
+         referral          TEXT
        )`,
     ),
     store.db.prepare(`CREATE INDEX IF NOT EXISTS usage_log_created_at ON usage_log (created_at)`),
   ]);
+
+  // A table created before the referral column existed needs it added. SQLite
+  // has no IF NOT EXISTS for columns, so a duplicate-column error is the
+  // expected outcome on every run after the first and is ignored.
+  await store.db
+    .prepare('ALTER TABLE usage_log ADD COLUMN referral TEXT')
+    .run()
+    .catch(() => undefined);
+
   schemaReady = true;
 }
 

@@ -212,6 +212,15 @@ lib/enhance/provider.ts
 
 | النطاق | المسارات |
 |---|---|
+| **الباك-إند والبوت — Claude Code** | `app/api/**`, `lib/**`, `telegram-bot/**` |
+| **الواجهة والتصميم — Codex** | `app/page.tsx`, `app/layout.tsx`, `app/globals.css`, `public/**` |
+| **مشترك — يُنسَّق قبل التعديل** | `docs/**`, `scripts/**`, `README.md`, `package.json`, `.openai/hosting.json` |
+
+> ⚠️ **بُدِّل هذا التقسيم بقرار المالك (2026-09-04).** كان الباك-إند لـCodex
+> والواجهة لـClaude Code. السبب المُعلَن: Codex أقوى في التصميم. راجع
+> `REVIEW.md` جولة 13.
+
+---|---|
 | **الباك-إند والبوت** | `app/api/**`, `lib/**`, `telegram-bot/**` |
 | **الواجهة والتصميم** | `app/page.tsx`, `app/layout.tsx`, `app/globals.css`, `public/**` |
 | **مشترك — يُنسَّق قبل التعديل** | `docs/**`, `README.md`, `package.json`, `.openai/hosting.json` |

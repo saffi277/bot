@@ -1,6 +1,8 @@
 import { GeminiProvider } from '@/lib/enhance/gemini';
 import { EnhanceProvider, ProviderError } from '@/lib/enhance/provider';
 import { limits, peek, release, reserve, Subject } from '@/lib/ratelimit';
+import { getConfig } from '@/lib/telegram';
+import { readCookie, TelegramIdentity } from '@/lib/telegram-auth';
 import { record } from '@/lib/usage-log';
 
 /**
@@ -25,15 +27,23 @@ function getProvider(): EnhanceProvider {
   return provider;
 }
 
-/** Cloudflare's header is authoritative in production. x-forwarded-for is
- * accepted only for local development because it is otherwise spoofable. */
-function identify(request: Request): Subject {
+/**
+ * A signed-in visitor is identified by their Telegram id and gets the larger
+ * allowance; everyone else is a guest keyed by IP.
+ *
+ * Cloudflare's header is authoritative in production. x-forwarded-for is
+ * accepted only in development because it is otherwise spoofable.
+ */
+async function identify(request: Request): Promise<{ subject: Subject; identity: TelegramIdentity | null }> {
+  const { token } = getConfig();
+  const identity = token ? await readCookie(request, token) : null;
+  if (identity) return { subject: { kind: 'user', id: identity.id }, identity };
+
   const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
   const localIp = process.env.NODE_ENV === 'production'
     ? undefined
     : request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const ip = cloudflareIp || localIp;
-  return { kind: 'guest', id: ip || 'unknown' };
+  return { subject: { kind: 'guest', id: cloudflareIp || localIp || 'unknown' }, identity: null };
 }
 
 function fail(message: string, status: number, extra: Record<string, unknown> = {}) {
@@ -42,9 +52,12 @@ function fail(message: string, status: number, extra: Record<string, unknown> = 
 
 /** Status probe: lets the page render an honest state before anyone uploads. */
 export async function GET(request: Request) {
-  const subject = identify(request);
+  const { subject, identity } = await identify(request);
   const quota = await peek(subject);
   return Response.json({
+    // Contract with the front end, fixed in docs/REVIEW.md round 7.
+    signedIn: Boolean(identity),
+    name: identity?.name,
     ready: getProvider().isConfigured() && quota.available,
     configured: getProvider().isConfigured(),
     storage: quota.available,
@@ -57,8 +70,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
-  const subject = identify(request);
+  const { subject } = await identify(request);
   const subjectKey = `${subject.kind}:${subject.id}`;
+  // B7 — where the visitor came from, so the bot's contribution is measurable.
+  const referral = request.headers.get('x-ref')?.slice(0, 60) || undefined;
 
   const service = getProvider();
   if (!service.isConfigured()) {
@@ -115,6 +130,7 @@ export async function POST(request: Request) {
       model: result.model,
       outputMegapixels: result.outputMegapixels,
       durationMs: result.durationMs,
+      referral,
     });
 
     return new Response(result.image, {
@@ -133,7 +149,7 @@ export async function POST(request: Request) {
     const isProviderError = error instanceof ProviderError;
     if (isProviderError && error.safeToRelease) await release(subject);
     const detail = error instanceof Error ? error.message : String(error);
-    await record({ requestId, subject: subjectKey, status: 'error', detail });
+    await record({ requestId, subject: subjectKey, status: 'error', detail, referral });
 
     if (isProviderError && error.code === 'rejected') {
       return fail('ما گدرنا نعالج هذي الصورة. رصيدك ما انخصم.', 422, { code: 'rejected' });
