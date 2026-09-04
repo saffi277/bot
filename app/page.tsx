@@ -369,8 +369,11 @@ export default function Home() {
           <a className="bar-link" href="#how">كيف يشتغل</a>
           {service?.storage && (
             <span className={service.signedIn ? 'quota is-user' : 'quota'} title="رصيدك اليوم">
-              <b>{service.remaining}</b>
-              <span>/{service.limit} اليوم</span>
+              <bdi dir="ltr">
+                <b>{service.remaining}</b>
+                <span>/{service.limit}</span>
+              </bdi>
+              <span> اليوم</span>
             </span>
           )}
           {service?.signedIn && service.name ? (
