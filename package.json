@@ -14,9 +14,10 @@
     "test:auth": "node scripts/verify-telegram-auth.mjs",
     "test:ops": "node scripts/verify-operations.mjs",
     "test": "npm run test:ratelimit && npm run test:auth && npm run test:ops",
-    "quality": "node scripts/quality-report.mjs",
-    "bakeoff": "node scripts/model-bakeoff.mjs",
-    "bot:doctor": "node scripts/bot-doctor.mjs",
+    "quality": "node --env-file-if-exists=.env.local scripts/quality-report.mjs",
+    "bakeoff": "node --env-file-if-exists=.env.local scripts/model-bakeoff.mjs",
+    "bot:doctor": "node --env-file-if-exists=.env.local scripts/bot-doctor.mjs",
+    "bot:webhook": "node --env-file-if-exists=.env.local telegram-bot/register-webhook.mjs",
     "setup:env": "node scripts/setup-env.mjs",
     "channel": "node scripts/channel.mjs"
   },
