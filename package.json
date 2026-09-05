@@ -12,6 +12,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test:ratelimit": "node scripts/verify-rate-limit.mjs",
     "test:auth": "node scripts/verify-telegram-auth.mjs",
+    "test:ops": "node scripts/verify-operations.mjs",
+    "test": "npm run test:ratelimit && npm run test:auth && npm run test:ops",
     "quality": "node scripts/quality-report.mjs",
     "bakeoff": "node scripts/model-bakeoff.mjs",
     "bot:doctor": "node scripts/bot-doctor.mjs",

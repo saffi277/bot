@@ -19,14 +19,38 @@
  * them is in place; what is missing is the list, not the machinery.
  */
 
+/**
+ * Two kinds, because the owner and Codex were each right about a different
+ * thing and the disagreement dissolves once they are separated.
+ *
+ * `enhance` is the one-button path: the visitor uploads and the model decides
+ * what the photograph needs. No menu, no choice to get wrong — Codex's
+ * position, and the flow fixed in docs/DISCUSSION.md.
+ *
+ * `creative` is a service the visitor deliberately picks, because it makes a
+ * *different* picture rather than a better version of theirs. Someone looking
+ * to put themselves onto a character will never find it behind a button
+ * labelled "restore", which is the owner's point.
+ *
+ * They also differ in money, which is why the distinction is in the type and
+ * not just in the copy: enhancement is one call, and a creative service that
+ * returns several variants costs one call each.
+ */
+export type OperationKind = 'enhance' | 'creative';
+
 export type Operation = {
   /** Stable id sent by the client. Never translated — it is a wire value. */
   id: string;
+  kind: OperationKind;
   /** Arabic label shown to the visitor. */
   label: string;
   /** One line telling the visitor what this does to their photo. */
   hint: string;
-  /** Quota cost of one run. Must equal the number of model calls made. */
+  /**
+   * Quota cost of one run, which must equal the number of model calls made.
+   * At $0.101 per 2K image, a service returning four variants costs the owner
+   * $0.40 per press and eats four of a visitor's daily allowance.
+   */
   units: number;
   /** Instruction sent to the model. */
   prompt: string;
@@ -56,14 +80,22 @@ export const RESTORE_PROMPT = [
 export const OPERATIONS: readonly Operation[] = [
   {
     id: 'restore',
+    kind: 'enhance',
     label: 'ترميم وتحسين',
     hint: 'يشدّ الملامح، يرجّع تفاصيل الجلد والشعر، يشيل التشويش، ويصلّح الألوان الباهتة وأضرار الصورة',
     units: 1,
     prompt: RESTORE_PROMPT,
   },
+  // Creative services go here as they are decided. Each one needs a name, a
+  // line of copy, and an honest unit count — and the unit count is the part
+  // that must not be guessed, because it is the owner's money.
 ];
 
-/** The operation used when a client sends none, so older callers keep working. */
+/**
+ * Used when a client sends no operation. It is the one-button path, so the
+ * default must always be an `enhance` service — falling back to a creative one
+ * would spend a visitor's quota on a picture they never asked for.
+ */
 export const DEFAULT_OPERATION = 'restore';
 
 /** Returns the operation, or null for an id we do not offer. */
@@ -75,6 +107,7 @@ export function findOperation(id: string | null | undefined): Operation | null {
 export function catalogue(): Array<Omit<Operation, 'prompt'>> {
   return OPERATIONS.map((operation) => ({
     id: operation.id,
+    kind: operation.kind,
     label: operation.label,
     hint: operation.hint,
     units: operation.units,
