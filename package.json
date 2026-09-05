@@ -15,7 +15,8 @@
     "quality": "node scripts/quality-report.mjs",
     "bakeoff": "node scripts/model-bakeoff.mjs",
     "bot:doctor": "node scripts/bot-doctor.mjs",
-    "setup:env": "node scripts/setup-env.mjs"
+    "setup:env": "node scripts/setup-env.mjs",
+    "channel": "node scripts/channel.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
