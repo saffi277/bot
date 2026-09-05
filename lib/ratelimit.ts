@@ -35,30 +35,43 @@ function scopeKey(subject: Subject): string {
   return `${subject.kind}:${subject.id}`;
 }
 
-/** Claims one slot in a single SQL statement. This prevents two concurrent
- * requests from both observing the final available slot. */
-async function claim(store: Store, scope: string, day: string, limit: number): Promise<boolean> {
-  if (limit <= 0) return false;
+/**
+ * Claims `units` slots in a single SQL statement, so two concurrent requests
+ * cannot both observe the last free slot.
+ *
+ * Units exist because one visible action is not always one model call: an
+ * operation that runs the model twice costs twice, and charging it as one
+ * would let the real spend drift above the cap while the counter still looked
+ * healthy. The whole claim succeeds or none of it does — a half-charged
+ * operation would leave the counter describing work that never happened.
+ */
+async function claim(store: Store, scope: string, day: string, limit: number, units: number): Promise<boolean> {
+  if (limit <= 0 || units <= 0 || units > limit) return false;
   const result = await store.db
     .prepare(
       `INSERT INTO usage_counters (scope, day, count)
-       SELECT ?, ?, 1 WHERE ? > 0
-       ON CONFLICT(scope, day) DO UPDATE SET count = count + 1 WHERE count < ?`,
+       SELECT ?, ?, ? WHERE ? <= ?
+       ON CONFLICT(scope, day) DO UPDATE SET count = count + ? WHERE count + ? <= ?`,
     )
-    .bind(scope, day, limit, limit)
+    .bind(scope, day, units, units, limit, units, units, limit)
     .run();
   return (result.meta?.changes ?? 0) === 1;
 }
 
-async function unclaim(store: Store, scope: string, day: string): Promise<void> {
+async function unclaim(store: Store, scope: string, day: string, units: number): Promise<void> {
   await store.db
-    .prepare('UPDATE usage_counters SET count = count - 1 WHERE scope = ? AND day = ? AND count > 0')
-    .bind(scope, day)
+    .prepare('UPDATE usage_counters SET count = count - ? WHERE scope = ? AND day = ? AND count >= ?')
+    .bind(units, scope, day, units)
     .run();
 }
 
-/** Reserves the global budget and the caller quota before any provider call. */
-export async function reserve(subject: Subject): Promise<LimitVerdict> {
+/**
+ * Reserves the global budget and the caller quota before any provider call.
+ *
+ * `units` is what this operation costs — how many model calls it will make.
+ * It defaults to 1, so every existing caller keeps its old behaviour.
+ */
+export async function reserve(subject: Subject, units = 1): Promise<LimitVerdict> {
   const { guest, user, global } = limits();
   const subjectLimit = subject.kind === 'user' ? user : guest;
 
@@ -71,13 +84,13 @@ export async function reserve(subject: Subject): Promise<LimitVerdict> {
   try {
     await ensureSchema(store);
     const day = today();
-    if (!(await claim(store, 'global', day, global))) {
+    if (!(await claim(store, 'global', day, global, units))) {
       return { allowed: false, reason: 'global', remaining: 0, limit: subjectLimit };
     }
-    if (!(await claim(store, scopeKey(subject), day, subjectLimit))) {
+    if (!(await claim(store, scopeKey(subject), day, subjectLimit, units))) {
       // No model request happened; compensate the global reservation. A D1
       // failure is intentionally conservative and holds the slot.
-      await unclaim(store, 'global', day).catch(() => undefined);
+      await unclaim(store, 'global', day, units).catch(() => undefined);
       return { allowed: false, reason: 'subject', remaining: 0, limit: subjectLimit };
     }
     return {
@@ -90,15 +103,19 @@ export async function reserve(subject: Subject): Promise<LimitVerdict> {
   }
 }
 
-/** Call this only when the provider confirms it rejected the request before work. */
-export async function release(subject: Subject): Promise<void> {
+/**
+ * Call this only when the provider confirms it rejected the request before
+ * work. `units` must match what reserve() charged, or the counter drifts away
+ * from the money actually spent.
+ */
+export async function release(subject: Subject, units = 1): Promise<void> {
   const store = await getStore();
   if (!store) return;
   try {
     await ensureSchema(store);
     const day = today();
-    await unclaim(store, scopeKey(subject), day);
-    await unclaim(store, 'global', day);
+    await unclaim(store, scopeKey(subject), day, units);
+    await unclaim(store, 'global', day, units);
   } catch {
     // Holding an extra slot is safer than allowing uncapped model spending.
   }

@@ -18,6 +18,12 @@ export type EnhanceRequest = {
   inputContentType: string;
   /** Longest edge of the output. Guards against a 15x cost blowup. */
   maxOutputEdge: number;
+  /**
+   * Instruction for the model, chosen by the caller from lib/enhance/operations.
+   * It lives there rather than here because which service ran is policy, and
+   * this port is meant to know nothing about policy.
+   */
+  prompt: string;
   /** Trace id carried through logs and into the provider call. */
   requestId: string;
 };

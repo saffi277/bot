@@ -1,5 +1,6 @@
 import { GeminiProvider } from '@/lib/enhance/gemini';
 import { EnhanceProvider, ProviderError } from '@/lib/enhance/provider';
+import { catalogue, findOperation } from '@/lib/enhance/operations';
 import { limits, peek, release, reserve, Subject } from '@/lib/ratelimit';
 import { getConfig } from '@/lib/telegram';
 import { readCookie, TelegramIdentity } from '@/lib/telegram-auth';
@@ -67,6 +68,9 @@ export async function GET(request: Request) {
     limit: quota.limit,
     maxOutputEdge: maxOutputEdge(),
     dailyCap: limits().global,
+    // The catalogue, so the front end renders whatever services exist rather
+    // than a list hardcoded in two places that drift apart. Prompts stay here.
+    operations: catalogue(),
   });
 }
 
@@ -83,16 +87,27 @@ export async function POST(request: Request) {
   }
 
   let file: File | null = null;
+  let requestedOperation: string | null = null;
   try {
     const form = await request.formData();
     const value = form.get('image');
     if (value instanceof File) file = value;
+    const asked = form.get('operation');
+    if (typeof asked === 'string') requestedOperation = asked;
   } catch {
     return fail('تعذّرت قراءة الملف المرسل.', 400, { code: 'bad_request' });
   }
 
   if (!file) {
     return fail('ما وصلتنا صورة. اختر صورة وحاول مرة ثانية.', 400, { code: 'no_file' });
+  }
+
+  // Which service was asked for. An unknown id is refused here rather than
+  // quietly falling back, so a client bug cannot bill the owner for the wrong
+  // operation. Sending none keeps the original single-service behaviour.
+  const operation = findOperation(requestedOperation);
+  if (!operation) {
+    return fail('الخدمة المطلوبة غير متوفرة.', 400, { code: 'unknown_operation' });
   }
   if (!ACCEPTED.includes(file.type)) {
     return fail('ندعم صور JPG وPNG وWebP فقط.', 415, { code: 'bad_type' });
@@ -101,8 +116,8 @@ export async function POST(request: Request) {
     return fail('حجم الصورة كبير. المسموح حتى ١٥ ميغابايت.', 413, { code: 'too_large' });
   }
 
-  // Reserve before any spending can happen.
-  const verdict = await reserve(subject);
+  // Reserve before any spending can happen, for what this operation costs.
+  const verdict = await reserve(subject, operation.units);
   if (!verdict.allowed) {
     if (verdict.reason === 'unavailable') {
       return fail('الخدمة تحت الصيانة حالياً. جرّب بعد شوي.', 503, { code: 'storage_unavailable' });
@@ -122,6 +137,7 @@ export async function POST(request: Request) {
       image: await file.arrayBuffer(),
       inputContentType: file.type,
       maxOutputEdge: maxOutputEdge(),
+      prompt: operation.prompt,
       requestId,
     });
 
@@ -149,7 +165,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const isProviderError = error instanceof ProviderError;
-    if (isProviderError && error.safeToRelease) await release(subject);
+    // Refund exactly what was charged. Releasing a fixed 1 against a
+    // multi-unit reservation would leak quota on every failure of a costlier
+    // operation, and the counter would stop describing the money spent.
+    if (isProviderError && error.safeToRelease) await release(subject, operation.units);
     const detail = error instanceof Error ? error.message : String(error);
     await record({ requestId, subject: subjectKey, status: 'error', detail, referral });
 

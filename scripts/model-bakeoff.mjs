@@ -12,7 +12,10 @@
 
 import { createInterface } from 'node:readline/promises';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const API_BASE = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta/models';
 const KEY = process.env.GEMINI_API_KEY;
@@ -41,15 +44,25 @@ const CATALOGUE = {
  * but what it is allowed to invent: physical damage may be reconstructed from
  * what surrounds it, a face may not.
  */
-const RESTORE_PROMPT = [
-  'Restore and enhance this photograph.',
-  'Sharpen detail, recover skin, hair and fabric texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
-  'Repair physical damage — tears, cracks, missing emulsion, scratches, stains, fading — by reconstructing what the surrounding image implies.',
-  'Never reconstruct a face: if facial detail is lost, leave it soft rather than inventing features. The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, or skin tone.',
-  'Preserve the original composition, framing, pose, clothing and background.',
-  'Do not add objects, people or elements that the original does not imply.',
-  'Return only the restored photograph, with no added border, frame, margin, watermark, signature or decoration, and keep the original framing and aspect ratio.',
-].join(' ');
+/**
+ * Read from lib/enhance/operations.ts rather than copied here. The copy had to
+ * stay byte-identical for the comparison to measure models instead of prompt
+ * differences, and that was a rule a human had to remember — the kind that
+ * holds until the day it does not. TypeScript is a devDependency, so
+ * transpiling costs nothing and removes the invariant entirely.
+ */
+const operationsSource = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'enhance', 'operations.ts'),
+  'utf8',
+);
+const { RESTORE_PROMPT } = await import(
+  'data:text/javascript;base64,' +
+    Buffer.from(
+      ts.transpileModule(operationsSource, {
+        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      }).outputText,
+    ).toString('base64')
+);
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
