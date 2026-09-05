@@ -61,8 +61,39 @@ for (const entry of catalogue()) {
   assert.ok(entry.units >= 1 && entry.label && entry.kind, `${entry.id}: the front end needs kind, label and units`);
 }
 
-// The restoration prompt carries the one rule the whole promise rests on.
-assert.match(RESTORE_PROMPT, /Never reconstruct a face/, 'The face rule is missing from the restoration prompt');
+/**
+ * The restoration prompt carries two promises that must never be edited away,
+ * and they pull against each other — which is why both are checked.
+ *
+ * It must sharpen faces, because a soft face in a sharp image is the failure
+ * everyone opening this kind of tool is trying to escape. And it must hold the
+ * person's identity fixed, because a face that came back sharper but belonging
+ * to someone else is worse than no restoration at all.
+ *
+ * The assertions match on meaning rather than on one sentence: an earlier
+ * version of this check was pinned to exact wording, and it fired when the
+ * prompt was corrected rather than when it was broken.
+ */
+assert.match(
+  RESTORE_PROMPT,
+  /identity of every person must survive unchanged/i,
+  'The prompt no longer protects the subject\'s identity',
+);
+assert.match(
+  RESTORE_PROMPT,
+  /\bfaces?\b[^.]*\b(focus|sharpen)/i,
+  'The prompt no longer asks for faces to be brought into focus — the whole product',
+);
+assert.match(
+  RESTORE_PROMPT,
+  /do not beautify/i,
+  'The prompt no longer forbids beautifying, so the result may not look like the person',
+);
+assert.doesNotMatch(
+  RESTORE_PROMPT,
+  /leave it soft/i,
+  'The prompt tells the model to return a soft face, which is the one thing it must not do',
+);
 
 const enhance = OPERATIONS.filter((o) => o.kind === 'enhance');
 const creative = OPERATIONS.filter((o) => o.kind === 'creative');

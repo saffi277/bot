@@ -57,21 +57,39 @@ export type Operation = {
 };
 
 /**
- * The first real test showed the earlier wording contradicted itself: it asked
- * the model to preserve the source wherever detail was unclear, which on a
- * photograph missing a third of its emulsion means leaving the holes — no
- * restoration at all. It produced a good result only by disobeying.
+ * The most important string in the product.
  *
- * The line that matters is not whether the model invents, but what it may
- * invent. Physical damage is reconstructed from what surrounds it; a face
- * never is, because a rebuilt face is a different person and that breaks the
- * whole promise.
+ * It has been wrong twice, in opposite directions. First it told the model to
+ * preserve the source wherever detail was unclear, which on a photograph
+ * missing a third of its emulsion means leaving the holes — no restoration at
+ * all. Then the correction overshot: "if facial detail is lost, leave it soft"
+ * instructed the model to hand back a blurred face, which is the one thing the
+ * owner is asking for and the single reason anyone opens Remini. A sharp
+ * background around a soft face is not a restored photograph.
+ *
+ * The distinction that actually holds is recover versus replace. Every feature
+ * the photograph contains, however faintly, is brought into focus — that is
+ * the product. What is genuinely absent is not fabricated, because a rebuilt
+ * face is a different person and that breaks the promise entirely.
+ *
+ * Beautifying is refused separately and on purpose. Smoothing skin, reshaping
+ * a jaw or whitening teeth all raise the same complaint against tools in this
+ * category: the person in the result is not the person in the photograph. The
+ * owner asked for light adjustment, and restraint is part of the instruction
+ * rather than something hoped for.
+ *
+ * Only a real key can settle whether this reads as well to the model as it
+ * does to us. `npm run bakeoff` exists for exactly that comparison.
  */
 export const RESTORE_PROMPT = [
   'Restore and enhance this photograph.',
-  'Sharpen detail, recover skin, hair and fabric texture, reduce blur, noise and compression artifacts, and correct faded or shifted colors.',
+  'Bring the entire image into sharp focus: recover fine detail and the real texture of skin, hair and fabric, and remove blur, softness, noise and compression artifacts.',
+  'Faces are the priority. Bring every face into clear, natural focus — recover the eyes, eyebrows, lashes, lips, hair and skin texture the photograph already contains, however faintly. Never hand back a soft face in a sharp image.',
+  'Recover, do not replace: sharpen the features that are present rather than substituting new ones. Where detail is genuinely absent, stay restrained and plausible instead of inventing a different face.',
+  'The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, skin tone, or the position and spacing of the eyes, nose and mouth.',
+  'Do not beautify: no skin smoothing that erases pores, freckles or wrinkles, no reshaping, no added makeup, no teeth whitening, no slimming. The person must remain recognisably themselves.',
+  'Correct faded or shifted colours and white balance with a light hand, keeping skin tones natural and avoiding oversaturation.',
   'Repair physical damage — tears, cracks, missing emulsion, scratches, stains, fading — by reconstructing what the surrounding image implies.',
-  'Never reconstruct a face: if facial detail is lost, leave it soft rather than inventing features. The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, or skin tone.',
   'Preserve the original composition, framing, pose, clothing and background.',
   'Do not add objects, people or elements that the original does not imply.',
   'Return only the restored photograph, with no added border, frame, margin, watermark, signature or decoration, and keep the original framing and aspect ratio.',
