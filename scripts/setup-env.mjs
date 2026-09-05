@@ -35,27 +35,27 @@ const MANAGED = [
   {
     key: 'TELEGRAM_BOT_TOKEN',
     value: '',
-    note: 'من @BotFather — الصقه هنا، ولا ترسله في أي محادثة',
+    note: 'From @BotFather. Keep it here only - never paste it into a chat.',
   },
   {
     key: 'TELEGRAM_BOT_USERNAME',
     value: '',
-    note: 'معرّف البوت بلا @',
+    note: 'Bot username, without the @',
   },
   {
     key: 'TELEGRAM_WEBHOOK_SECRET',
     value: secret,
-    note: 'وُلِّد تلقائياً — بدونه يرفض الويبهوك كل تحديث',
+    note: 'Generated. Without it the webhook refuses every update.',
   },
   {
     key: 'TELEGRAM_SESSION_SECRET',
     value: secret,
-    note: 'وُلِّد تلقائياً — مستقل عن التوكن عمداً',
+    note: 'Generated. Deliberately separate from the bot token.',
   },
   {
     key: 'APP_URL',
     value: 'http://localhost:3000',
-    note: 'غيّره إلى عنوان الموقع بعد النشر',
+    note: 'Change to the deployed site address.',
   },
   {
     key: 'GEMINI_API_KEY',
@@ -63,7 +63,7 @@ const MANAGED = [
     // Written blank on purpose. Omitting the line entirely made a filled file
     // look complete while the site still reported itself unconfigured, with
     // nothing on screen to say which key was missing.
-    note: 'اختياري الآن — مطلوب لتشغيل الترميم فعلياً. الموقع يعمل بدونه ويعلن أنه تحت التجهيز',
+    note: 'Optional for now. Needed only to actually restore photos; the site runs without it and says so.',
   },
 ];
 
@@ -89,17 +89,17 @@ async function ask() {
   if (!process.stdin.isTTY) return answers;
 
   const needed = [
-    { key: 'TELEGRAM_BOT_TOKEN', q: 'التوكن من @BotFather (يشبه 1234567890:AA…)' },
-    { key: 'TELEGRAM_BOT_USERNAME', q: 'معرّف البوت بلا @ (مثل saffi_photo_bot)' },
+    { key: 'TELEGRAM_BOT_TOKEN', q: 'Bot token from @BotFather  (looks like 1234567890:AA...)' },
+    { key: 'TELEGRAM_BOT_USERNAME', q: 'Bot username, no @         (e.g. saffi_photo_bot)' },
   ].filter((entry) => !existing[entry.key]);
   if (!needed.length) return answers;
 
-  console.log('\n🤖 محتاج قيمتين لا أقدر أخترعهما. اتركها فارغة بالضغط على Enter لو ما توفّرت بعد.\n');
+  console.log('\nTwo values I cannot invent. Press Enter to skip either one.\n');
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   for (const entry of needed) {
     // Trimmed because a trailing space pasted from a chat window is invisible
     // and produces a token Telegram rejects with no useful message.
-    const value = (await rl.question(`   ${entry.q}\n   > `)).trim();
+    const value = (await rl.question(`  ${entry.q}\n  > `)).trim();
     if (value) answers[entry.key] = value.replace(/^@/, '');
     console.log('');
   }
@@ -108,7 +108,7 @@ async function ask() {
 }
 
 const provided = await ask();
-const lines = ['# مُولَّد بـ npm run setup:env — هذا الملف لا يدخل الگت (.gitignore)', ''];
+const lines = ['# Written by: npm run setup:env   -   git-ignored, never committed', ''];
 const filled = [];
 const entered = [];
 const kept = [];
@@ -137,28 +137,28 @@ for (const entry of MANAGED) {
 // Anything the file already had that we do not manage is preserved verbatim.
 const extra = Object.keys(existing).filter((key) => !MANAGED.some((m) => m.key === key));
 if (extra.length) {
-  lines.push('# قيم كانت موجودة مسبقاً');
+  lines.push('# Values that were already here');
   for (const key of extra) lines.push(`${key}=${existing[key]}`);
   lines.push('');
 }
 
 writeFileSync(target, lines.join('\n'));
 
-console.log('\n✅ كُتب .env.local\n');
-if (entered.length) console.log(`   من كتابتك:     ${entered.join(' · ')}`);
-if (filled.length) console.log(`   وُلِّد تلقائياً: ${filled.join(' · ')}`);
-if (kept.length) console.log(`   بقي كما هو:    ${kept.join(' · ')}`);
+console.log('\nWrote .env.local\n');
+if (entered.length) console.log(`  you entered : ${entered.join(', ')}`);
+if (filled.length) console.log(`  generated   : ${filled.join(', ')}`);
+if (kept.length) console.log(`  unchanged   : ${kept.join(', ')}`);
 // GEMINI_API_KEY is separated out: it is not a launch blocker like the others,
 // and listing it beside them would make the bot look unlaunchable without it.
 const required = blank.filter((key) => key !== 'GEMINI_API_KEY');
 if (required.length) {
-  console.log(`\n⚠️  ينقصه منك: ${required.join(' · ')}`);
-  console.log('   افتح .env.local وألصق القيمة أمام كل واحد.');
+  console.log(`\n  STILL NEEDED: ${required.join(', ')}`);
+  console.log('  Open .env.local and paste each value after the = sign.');
 }
 if (blank.includes('GEMINI_API_KEY')) {
-  console.log('\n💡 GEMINI_API_KEY تُرك فارغاً — البوت والموقع يعملان بدونه،');
-  console.log('   والموقع يعلن أنه «تحت التجهيز» حتى تضعه.');
+  console.log('\n  GEMINI_API_KEY left empty. The bot and site both work without it;');
+  console.log('  the site simply reports that restoration is not switched on yet.');
 }
 console.log(`\n   📄 ${target}`);
-console.log('   محمي بـ .gitignore — لن يُرفع إلى الگت.');
-console.log(required.length ? '   افتحه، أكمل الناقص، ثم:  npm run dev\n' : '   جاهز. شغّل:  npm run dev\n');
+console.log('  Git-ignored - this file is never pushed.');
+console.log(required.length ? '  Open it, fill the rest, then:  npm run dev\n' : '  Ready. Run:  npm run dev\n');

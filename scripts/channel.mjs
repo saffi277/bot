@@ -39,7 +39,7 @@ rounds.forEach((round, i) => {
 });
 
 if (!rounds.length) {
-  console.error('لم أجد أي جولة في docs/REVIEW.md — هل تغيّرت صيغة العناوين؟');
+  console.error('No rounds found in docs/REVIEW.md - did the heading format change?');
   process.exit(1);
 }
 
@@ -55,8 +55,8 @@ function resolve(name) {
 
 const identity = resolve(me);
 if (me && !identity) {
-  console.error(`\n❌ لا أعرف الوكيل "${me}".`);
-  console.error(`   الأسماء الموجودة في القناة: ${authors.join(' · ')}\n`);
+  console.error(`\nUnknown agent: "${me}"`);
+  console.error(`  Agents in this channel: ${authors.join(', ')}\n`);
   process.exit(1);
 }
 
@@ -65,7 +65,7 @@ const bar = '─'.repeat(60);
 // ── 1. Open tasks, lifted from the table at the top of the file ──────
 const tableStart = lines.findIndex((l) => l.includes('المهام المفتوحة'));
 if (tableStart !== -1) {
-  console.log(`\n${bar}\n📋 المهام المفتوحة\n${bar}`);
+  console.log(`\n${bar}\nOPEN TASKS\n${bar}`);
   for (let i = tableStart + 1; i < rounds[0].start; i += 1) {
     const line = lines[i];
     if (line.startsWith('## ')) break;
@@ -83,16 +83,16 @@ if (identity) {
   const fresh = rounds.filter((r) => r.number > (mine?.number ?? 0) && r.author !== identity);
 
   if (!mine) {
-    console.log(`👋 لم تكتب في القناة بعد يا ${identity} — اقرأ آخر جولتين أدناه.\n${bar}`);
+    console.log(`${identity} has not written here yet - the last two rounds follow.\n${bar}`);
     for (const round of rounds.slice(-2)) print(round);
   } else if (!fresh.length) {
-    console.log(`✅ لا جديد لك منذ جولتك ${mine.number}.\n${bar}`);
+    console.log(`Nothing new since your round ${mine.number}.\n${bar}`);
   } else {
-    console.log(`📬 ${fresh.length} جولة جديدة لك منذ جولتك ${mine.number}\n${bar}`);
+    console.log(`${fresh.length} new round(s) since your round ${mine.number}\n${bar}`);
     for (const round of fresh) print(round);
   }
 } else {
-  console.log(`📖 آخر جولتين (مرّر اسمك لترى ما يخصّك)\n${bar}`);
+  console.log(`Last two rounds (pass your name to see only what is new for you)\n${bar}`);
   for (const round of rounds.slice(-2)) print(round);
 }
 
@@ -105,7 +105,7 @@ const next = Math.max(...rounds.map((r) => r.number)) + 1;
 const today = new Date().toISOString().slice(0, 10);
 
 console.log(bar);
-console.log('✍️  عنوان جولتك التالية — انسخه كما هو:\n');
-console.log(`## جولة ${next} — ${identity ?? '<اسمك>'} — ${today}`);
-console.log(`\n   أضِفه في نهاية الملف. لا تعدّل ما كتبه الآخر.`);
+console.log('Heading for your next round - copy it as-is:\n');
+console.log(`## جولة ${next} — ${identity ?? '<your name>'} — ${today}`);
+console.log('\n  Append it at the end of the file. Never edit the other agent\'s rounds.');
 console.log(`${bar}\n`);

@@ -46,20 +46,20 @@ let names;
 try {
   names = (await readdir(folder)).filter((name) => extname(name).toLowerCase() in IMAGE_TYPES).sort();
 } catch {
-  console.error(`لم أقدر أقرأ المجلد: ${folder}`);
+  console.error(`Could not read the folder: ${folder}`);
   process.exit(1);
 }
 if (!names.length) {
-  console.error(`ماكو صور بالمجلد: ${folder}`);
+  console.error(`No images in: ${folder}`);
   process.exit(1);
 }
 
 const status = await fetch(`${base}/api/enhance`).then((r) => r.json()).catch(() => null);
 if (!status?.configured) {
-  console.error('المزوّد غير مهيّأ — اضبط GEMINI_API_KEY قبل التشغيل.');
+  console.error('Provider not configured - set GEMINI_API_KEY before running.');
   process.exit(1);
 }
-console.log(`${names.length} صورة · الرصيد المتاح: ${status.remaining}/${status.limit}\n`);
+console.log(`${names.length} image(s) - quota available: ${status.remaining}/${status.limit}\n`);
 
 const rows = [];
 let stopped = null;
@@ -76,21 +76,21 @@ for (const [index, name] of names.entries()) {
   try {
     response = await fetch(`${base}/api/enhance`, { method: 'POST', body: form });
   } catch (error) {
-    console.log(`تعذّر الاتصال (${error.message})`);
+    console.log(`connection failed (${error.message})`);
     rows.push({ name, ok: false, detail: 'تعذّر الاتصال بالخادم' });
     continue;
   }
 
   if (response.status === 429) {
     const payload = await response.json().catch(() => ({}));
-    console.log('توقّف — الحد اليومي');
+    console.log('stopped - daily cap reached');
     stopped = { at: index, reason: payload.error ?? 'الحد اليومي' };
     break;
   }
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    console.log(`فشل (${response.status})`);
+    console.log(`failed (${response.status})`);
     rows.push({ name, ok: false, detail: payload.error ?? `HTTP ${response.status}` });
     continue;
   }
@@ -167,11 +167,11 @@ for (const frame of document.querySelectorAll('.frame')) {
 </html>`);
 
 console.log(`\n${'─'.repeat(46)}`);
-console.log(`نجحت      : ${done.length}/${names.length}`);
+console.log(`succeeded  : ${done.length}/${names.length}`);
 if (times.length) {
-  console.log(`متوسط الزمن: ${(times.reduce((a, b) => a + b, 0) / times.length / 1000).toFixed(1)}s`);
-  console.log(`p95        : ${(p95 / 1000).toFixed(1)}s${p95 > 20000 ? '  ⚠ فوق 20s — راجع قرار المعالجة غير المتزامنة' : ''}`);
+  console.log(`mean time  : ${(times.reduce((a, b) => a + b, 0) / times.length / 1000).toFixed(1)}s`);
+  console.log(`p95        : ${(p95 / 1000).toFixed(1)}s${p95 > 20000 ? '  WARNING: over 20s - revisit the async-processing decision' : ''}`);
 }
-console.log(`التكلفة    : $${cost.toFixed(2)} (${done.length ? (cost / done.length).toFixed(3) : 0} للصورة)`);
-if (stopped) console.log(`توقّف      : ${stopped.reason}`);
-console.log(`\n📄 quality-report.html — افتحه بالمتصفح`);
+console.log(`cost       : $${cost.toFixed(2)} ($${done.length ? (cost / done.length).toFixed(3) : 0} per image)`);
+if (stopped) console.log(`stopped    : ${stopped.reason}`);
+console.log(`\nquality-report.html written - open it in a browser`);

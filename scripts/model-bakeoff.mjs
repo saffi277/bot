@@ -74,7 +74,7 @@ const models = arg('models', Object.keys(CATALOGUE).join(',')).split(',').map((m
 const assumeYes = process.argv.includes('--yes');
 
 if (!KEY) {
-  console.error('اضبط GEMINI_API_KEY قبل التشغيل.');
+  console.error('Set GEMINI_API_KEY before running.');
   process.exit(1);
 }
 
@@ -82,29 +82,29 @@ let names;
 try {
   names = (await readdir(folder)).filter((n) => extname(n).toLowerCase() in TYPES).sort();
 } catch {
-  console.error(`لم أقدر أقرأ المجلد: ${folder}`);
+  console.error(`Could not read the folder: ${folder}`);
   process.exit(1);
 }
 if (!names.length) {
-  console.error(`ماكو صور بالمجلد: ${folder}`);
+  console.error(`No images in: ${folder}`);
   process.exit(1);
 }
 
 // Show the bill before spending a cent of it.
 const estimate = models.reduce((sum, m) => sum + (CATALOGUE[m]?.price ?? 0.134) * names.length, 0);
-console.log(`\n${names.length} صورة × ${models.length} نموذج = ${names.length * models.length} نداء\n`);
+console.log(`\n${names.length} image(s) x ${models.length} model(s) = ${names.length * models.length} calls\n`);
 for (const model of models) {
   const entry = CATALOGUE[model] ?? { price: 0.134, note: 'غير معروف — يُقدَّر بسعر الطبقة العليا' };
   console.log(`  ${model.padEnd(26)} $${(entry.price * names.length).toFixed(2).padStart(6)}   ${entry.note}`);
 }
-console.log(`\n  التكلفة التقديرية الإجمالية: $${estimate.toFixed(2)}\n`);
+console.log(`\n  Estimated total cost: $${estimate.toFixed(2)}\n`);
 
 if (!assumeYes) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = (await rl.question('تكمل؟ اكتب y للموافقة: ')).trim().toLowerCase();
+  const answer = (await rl.question('Continue? type y to confirm: ')).trim().toLowerCase();
   rl.close();
   if (answer !== 'y' && answer !== 'yes') {
-    console.log('أُلغي. ما انصرف ولا فلس.');
+    console.log('Cancelled. Nothing was spent.');
     process.exit(0);
   }
 }
@@ -132,12 +132,12 @@ async function run(model, bytes, mimeType) {
   }
 
   const payload = await response.json();
-  if (payload.promptFeedback?.blockReason) throw new Error(`مرفوضة: ${payload.promptFeedback.blockReason}`);
+  if (payload.promptFeedback?.blockReason) throw new Error(`Blocked: ${payload.promptFeedback.blockReason}`);
 
   const part = (payload.candidates?.[0]?.content?.parts ?? [])
     .map((p) => p.inlineData ?? p.inline_data)
     .find((d) => d?.data);
-  if (!part?.data) throw new Error('ما رجّع صورة');
+  if (!part?.data) throw new Error('No image returned');
 
   return {
     dataUrl: `data:${part.mimeType ?? part.mime_type ?? 'image/png'};base64,${part.data}`,
@@ -165,7 +165,7 @@ for (const [index, name] of names.entries()) {
       // One model failing must not cost the whole run.
       cells.push({ model, error: error.message });
       totals[model].failed += 1;
-      console.log(`فشل — ${error.message}`);
+      console.log(`failed - ${error.message}`);
     }
   }
 
@@ -224,4 +224,4 @@ for (const model of models) {
   const t = totals[model];
   console.log(`${model.padEnd(26)} ${t.ok}/${names.length} · ${(mean(t.ms) / 1000).toFixed(1)}s · $${((CATALOGUE[model]?.price ?? 0.134) * t.ok).toFixed(2)}`);
 }
-console.log(`\n📄 model-bakeoff.html — افتحه وقارن بعينك`);
+console.log(`\nmodel-bakeoff.html written - open it and compare with your own eyes`);

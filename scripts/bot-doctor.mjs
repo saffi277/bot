@@ -20,12 +20,6 @@ const api = process.env.TELEGRAM_API_BASE || 'https://api.telegram.org/bot';
 const rows = [];
 const note = (ok, label, detail, fix) => rows.push({ ok, label, detail, fix });
 
-/**
- * Arabic-Indic digits. A Latin number sitting inside an Arabic sentence gets
- * reordered by the bidi algorithm in some terminals, which is how "٣٢٠×٢٤٠"
- * once rendered backwards. Every number this tool prints goes through here.
- */
-const num = (value) => String(value).replace(/[0-9]/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
 
 async function call(method) {
   const response = await fetch(`${api}${token}/${method}`);
@@ -34,102 +28,102 @@ async function call(method) {
   return payload.result;
 }
 
-console.log('\n🩺 فحص بوت تلگرام\n' + '─'.repeat(46));
+console.log('\nTelegram bot check\n' + '-'.repeat(58));
 
 if (!token) {
-  note(false, 'التوكن', 'غير مضبوط', 'أنشئ بوتاً عند @BotFather وضع TELEGRAM_BOT_TOKEN');
+  note(false, 'token', 'not set', 'Create a bot with @BotFather, then set TELEGRAM_BOT_TOKEN');
 } else {
   try {
     const me = await call('getMe');
-    note(true, 'التوكن', `@${me.username} — ${me.first_name}`, null);
+    note(true, 'token', `@${me.username} - ${me.first_name}`, null);
 
     if (username && username !== me.username) {
-      note(false, 'اسم البوت', `الإعداد "${username}" لا يطابق "${me.username}"`,
-        `صحّح TELEGRAM_BOT_USERNAME إلى ${me.username}`);
+      note(false, 'bot username', `set to "${username}" but the bot is "${me.username}"`,
+        `Change TELEGRAM_BOT_USERNAME to ${me.username}`);
     } else if (!username) {
-      note(false, 'اسم البوت', 'TELEGRAM_BOT_USERNAME غير مضبوط',
-        `ضعه = ${me.username} — بدونه لا يظهر زر الدخول في الموقع`);
+      note(false, 'bot username', 'TELEGRAM_BOT_USERNAME not set',
+        `Set it to ${me.username} - without it the site shows no sign-in button`);
     } else {
-      note(true, 'اسم البوت', `@${username}`, null);
+      note(true, 'bot username', `@${username}`, null);
     }
 
     const hook = await call('getWebhookInfo');
     const expected = appUrl ? `${appUrl}/api/telegram` : null;
 
     if (!hook.url) {
-      note(false, 'الويبهوك', 'غير مسجَّل — البوت لن يرد على أي رسالة',
-        'شغّل: node telegram-bot/register-webhook.mjs');
+      note(false, 'webhook', 'not registered - the bot will answer nothing',
+        'Run: node telegram-bot/register-webhook.mjs');
     } else if (expected && hook.url !== expected) {
-      note(false, 'الويبهوك', `مسجَّل على ${hook.url}`,
-        `المتوقّع ${expected} — أعد التسجيل بعد ضبط APP_URL`);
+      note(false, 'webhook', `points at ${hook.url}`,
+        `Expected ${expected} - fix APP_URL and register again`);
     } else {
-      note(true, 'الويبهوك', hook.url, null);
+      note(true, 'webhook', hook.url, null);
     }
 
     // A pending backlog with a stored error is the clearest signal that
     // Telegram is delivering and our endpoint is refusing.
     if (hook.last_error_message) {
       const when = hook.last_error_date ? new Date(hook.last_error_date * 1000).toISOString().slice(0, 16) : '';
-      note(false, 'آخر خطأ من تلگرام', `${hook.last_error_message} (${when})`,
-        'تلگرام يصل إلينا لكن المسار يرفض — راجع السر والنشر');
+      note(false, 'last error', `${hook.last_error_message} (${when})`,
+        'Telegram reaches us but the route refuses - check the secret and the deploy');
     }
     if (hook.pending_update_count > 0) {
-      note(false, 'رسائل معلّقة', `${num(hook.pending_update_count)} لم تُسلَّم`,
-        'الموقع لا يستجيب — تأكد أنه منشور ويعمل');
+      note(false, 'pending updates', `${hook.pending_update_count} undelivered`,
+        'The site is not responding - check that it is deployed and up');
     }
 
-    note(Boolean(hook.has_custom_certificate) === false, 'الشهادة', 'قياسية', null);
+    note(Boolean(hook.has_custom_certificate) === false, 'certificate', 'standard', null);
 
     if (!secret) {
-      note(false, 'سر الويبهوك', 'غير مضبوط — الويبهوك يرفض كل تحديث',
-        'اضبط TELEGRAM_WEBHOOK_SECRET بنفس القيمة المسجَّلة، وإلا لن يرد البوت إطلاقاً');
+      note(false, 'webhook secret', 'not set - the webhook refuses every update',
+        'Set TELEGRAM_WEBHOOK_SECRET to the value you registered, or the bot never answers');
     } else {
-      note(true, 'سر الويبهوك', 'مضبوط', null);
+      note(true, 'webhook secret', 'set', null);
     }
 
     // Its own key on purpose: signing sessions with the bot token means
     // rotating the token silently signs every visitor out.
     if (!sessionSecret) {
-      note(false, 'سر الجلسة', 'غير مضبوط — الدخول بتلگرام معطّل',
-        'اضبط TELEGRAM_SESSION_SECRET (٣٢ حرفاً عشوائياً على الأقل، وليس التوكن). الموقع يشتغل بوضع الزائر حتى تضبطه');
+      note(false, 'session secret', 'not set - Telegram sign-in is off',
+        'Set TELEGRAM_SESSION_SECRET (32+ random chars, NOT the bot token). The site runs in guest mode until you do');
     } else if (sessionSecret === token) {
-      note(false, 'سر الجلسة', 'مطابق لتوكن البوت',
-        'اجعله قيمة مستقلة — تدوير التوكن بخلاف ذلك يطرد كل المستخدمين');
+      note(false, 'session secret', 'same as the bot token',
+        'Make it a separate value - otherwise rotating the token signs every user out');
     } else if (sessionSecret.length < 32) {
-      note(false, 'سر الجلسة', `قصير (${num(sessionSecret.length)} حرفاً)`,
-        'استعمل ٣٢ حرفاً عشوائياً على الأقل');
+      note(false, 'session secret', `too short (${sessionSecret.length} chars)`,
+        'Use at least 32 random characters');
     } else {
-      note(true, 'سر الجلسة', 'مضبوط ومستقل عن التوكن', null);
+      note(true, 'session secret', 'set, and separate from the token', null);
     }
 
     const commands = await call('getMyCommands');
     if (!commands.length) {
-      note(false, 'الأوامر', 'غير مسجَّلة',
-        'شغّل register-webhook.mjs — بدونها لا تظهر قائمة الأوامر للمستخدم');
+      note(false, 'commands', 'not registered',
+        'Run register-webhook.mjs - without it users see no command menu');
     } else {
-      note(true, 'الأوامر', commands.map((c) => `/${c.command}`).join(' · '), null);
+      note(true, 'commands', commands.map((c) => `/${c.command}`).join(' '), null);
     }
   } catch (error) {
-    note(false, 'الاتصال بتلگرام', error.message,
+    note(false, 'reaching Telegram', error.message,
       error.message.includes('Unauthorized')
-        ? 'التوكن غير صالح أو أُلغي — أنشئ واحداً جديداً عند @BotFather'
-        : 'تحقق من الشبكة ومن صحة التوكن');
+        ? 'The token is invalid or was revoked - create a new one with @BotFather'
+        : 'Check the network and that the token is correct');
   }
 }
 
 if (!appUrl) {
-  note(false, 'عنوان الموقع', 'APP_URL غير مضبوط',
-    'بدونه زر «افتح صفّي» لن يعرف إلى أين يذهب');
+  note(false, 'site address', 'APP_URL not set',
+    'Without it the "open Saffi" button has nowhere to go');
 } else {
-  note(true, 'عنوان الموقع', appUrl, null);
+  note(true, 'site address', appUrl, null);
 }
 
 for (const row of rows) {
-  console.log(`${row.ok ? '✅' : '❌'} ${row.label.padEnd(20)} ${row.detail}`);
-  if (row.fix) console.log(`   ↳ ${row.fix}`);
+  console.log(`${row.ok ? '[ OK ]' : '[FAIL]'} ${row.label.padEnd(16)} ${row.detail}`);
+  if (row.fix) console.log(`       -> ${row.fix}`);
 }
 
 const failed = rows.filter((r) => !r.ok).length;
-console.log('─'.repeat(46));
-console.log(failed ? `❌ ${num(failed)} مشكلة تمنع الإطلاق` : '✅ البوت جاهز — جرّب /start');
+console.log('-'.repeat(58));
+console.log(failed ? `${failed} problem(s) blocking launch` : 'Bot is ready - send it /start');
 process.exit(failed ? 1 : 0);
