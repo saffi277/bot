@@ -4,6 +4,12 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 type Stage = 'idle' | 'preparing' | 'processing' | 'done';
 type Shot = { url: string; width: number; height: number };
+type Operation = {
+  id: string;
+  label: string;
+  hint: string;
+  units: number;
+};
 type Service = {
   ready: boolean;
   configured: boolean;
@@ -14,6 +20,7 @@ type Service = {
   /** Contract with the backend (docs/REVIEW.md round 7). Absent until it lands. */
   signedIn?: boolean;
   name?: string;
+  operations?: Operation[];
 };
 
 const FALLBACK_EDGE = 2048;
@@ -164,6 +171,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
   const [botUsername, setBotUsername] = useState<string | null>(null);
+  const [selectedOperation, setSelectedOperation] = useState('restore');
 
   useEffect(() => {
     fetch('/api/enhance')
@@ -175,6 +183,10 @@ export default function Home() {
       .then((info: { botUsername: string | null }) => setBotUsername(info.botUsername))
       .catch(() => setBotUsername(null));
   }, []);
+
+  const selectedOperationId = service?.operations?.some((operation) => operation.id === selectedOperation)
+    ? selectedOperation
+    : (service?.operations?.[0]?.id ?? selectedOperation);
 
   // Object URLs are revoked on replacement and on unmount to avoid leaking blobs.
   useEffect(
@@ -220,6 +232,7 @@ export default function Home() {
 
       const body = new FormData();
       body.append('image', new File([prepared.blob], 'upload.jpg', { type: 'image/jpeg' }));
+      body.append('operation', selectedOperationId);
 
       try {
         const referral = readReferral();
@@ -257,7 +270,7 @@ export default function Home() {
         setError('انقطع الاتصال. تأكد من الإنترنت وجرّب مرة ثانية.');
       }
     },
-    [service],
+    [selectedOperationId, service],
   );
 
   const accept = useCallback(
@@ -348,6 +361,8 @@ export default function Home() {
 
   const busy = stage === 'preparing' || stage === 'processing';
   const offline = service !== null && !service.ready;
+  const operations = service?.operations ?? [];
+  const activeOperation = operations.find((operation) => operation.id === selectedOperationId);
 
   return (
     <main className="site-shell">
@@ -446,6 +461,43 @@ export default function Home() {
           </div>
         )}
 
+        {operations.length > 0 && !before && (
+          <section className="operation-picker" aria-labelledby="operation-title">
+            <div className="operation-heading">
+              <div>
+                <p className="section-kicker">اختَر نوع النتيجة</p>
+                <h2 id="operation-title">شنو نصلّح اليوم؟</h2>
+              </div>
+              <p>كل خدمة توضح رصيدها قبل ما تبدأ.</p>
+            </div>
+            <div className="operation-list">
+              {operations.map((operation) => {
+                const selected = operation.id === selectedOperationId;
+                return (
+                  <button
+                    key={operation.id}
+                    type="button"
+                    className={selected ? 'operation is-selected' : 'operation'}
+                    onClick={() => setSelectedOperation(operation.id)}
+                    aria-pressed={selected}
+                    disabled={offline}
+                  >
+                    <span className="operation-check" aria-hidden="true">{selected ? '✓' : '○'}</span>
+                    <span className="operation-body">
+                      <strong>{operation.label}</strong>
+                      <small>{operation.hint}</small>
+                    </span>
+                    <span className="operation-units">
+                      <bdi dir="ltr">{operation.units}</bdi>
+                      <small>{operation.units === 1 ? ' من رصيدك اليومي' : ' وحدات من رصيدك اليومي'}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {!before ? (
           <div
             className={hovering ? 'drop is-over' : 'drop'}
@@ -491,9 +543,12 @@ export default function Home() {
               </div>
               {elapsed !== null && (
                 <span className="chip">
-                  {elapsed < 950 ? `تمّت خلال أقل من ثانية` : `تمّت خلال ${(elapsed / 1000).toFixed(1)} ثانية`}
+                  {elapsed < 950
+                    ? 'تمّت خلال أقل من ثانية'
+                    : `تمّت خلال ${(elapsed / 1000).toLocaleString('ar-IQ', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ثانية`}
                 </span>
               )}
+              {activeOperation && <span className="chip operation-chip">{activeOperation.label}</span>}
             </div>
 
             <div className="frame" ref={frame}>
