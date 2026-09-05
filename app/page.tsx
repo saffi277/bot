@@ -4,6 +4,13 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 type Stage = 'idle' | 'preparing' | 'processing' | 'done';
 type Shot = { url: string; width: number; height: number };
+type Operation = {
+  id: string;
+  kind: 'enhance' | 'creative';
+  label: string;
+  hint: string;
+  units: number;
+};
 type Service = {
   ready: boolean;
   configured: boolean;
@@ -14,6 +21,7 @@ type Service = {
   /** Contract with the backend (docs/REVIEW.md round 7). Absent until it lands. */
   signedIn?: boolean;
   name?: string;
+  operations?: Operation[];
 };
 
 const FALLBACK_EDGE = 2048;
@@ -164,6 +172,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
   const [botUsername, setBotUsername] = useState<string | null>(null);
+  const [selectedOperation, setSelectedOperation] = useState('restore');
 
   useEffect(() => {
     fetch('/api/enhance')
@@ -175,6 +184,10 @@ export default function Home() {
       .then((info: { botUsername: string | null }) => setBotUsername(info.botUsername))
       .catch(() => setBotUsername(null));
   }, []);
+
+  const selectedOperationId = service?.operations?.some((operation) => operation.id === selectedOperation)
+    ? selectedOperation
+    : (service?.operations?.[0]?.id ?? selectedOperation);
 
   // Object URLs are revoked on replacement and on unmount to avoid leaking blobs.
   useEffect(
@@ -220,6 +233,7 @@ export default function Home() {
 
       const body = new FormData();
       body.append('image', new File([prepared.blob], 'upload.jpg', { type: 'image/jpeg' }));
+      body.append('operation', selectedOperationId);
 
       try {
         const referral = readReferral();
@@ -257,7 +271,7 @@ export default function Home() {
         setError('انقطع الاتصال. تأكد من الإنترنت وجرّب مرة ثانية.');
       }
     },
-    [service],
+    [selectedOperationId, service],
   );
 
   const accept = useCallback(
@@ -268,7 +282,7 @@ export default function Home() {
         return;
       }
       if (file.size > MAX_INPUT_BYTES) {
-        setError('حجم الصورة كبير. المسموح حتى 15 ميغابايت.');
+        setError('حجم الصورة كبير. المسموح حتى ١٥ ميغابايت.');
         return;
       }
       void run(file);
@@ -348,6 +362,9 @@ export default function Home() {
 
   const busy = stage === 'preparing' || stage === 'processing';
   const offline = service !== null && !service.ready;
+  const operations = service?.operations ?? [];
+  const hasCreativeOperations = operations.some((operation) => operation.kind === 'creative');
+  const activeOperation = operations.find((operation) => operation.id === selectedOperationId);
 
   return (
     <main className="site-shell">
@@ -398,14 +415,39 @@ export default function Home() {
           </p>
           <a className="hero-cta" href="#studio">ابدأ بالصورة <span aria-hidden="true">↙</span></a>
         </div>
-        <div className="hero-visual" aria-hidden="true">
-          <span className="orbital orbital-one">وضوح</span>
-          <span className="orbital orbital-two">تفاصيل</span>
-          <div className="scan-card">
+        <div className="hero-visual" aria-label="أمثلة لصور يمكن لصفّي تحسينها">
+          <img className="hero-gallery" src="/saffi-gallery-v1.png" alt="لقطات بورتريه وذكرى عائلية وصورة ليلية" />
+          <span className="orbital orbital-one">ترميم تلقائي</span>
+          <span className="orbital orbital-two">يحفظ الملامح</span>
+          <div className="scan-card" aria-hidden="true">
             <div className="scan-line" />
-            <span>AI</span>
-            <small>RESTORE</small>
+            <span>✦</span>
+            <small>SAFFI</small>
           </div>
+        </div>
+      </section>
+
+      <section className="showcase" aria-labelledby="showcase-title">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">يعرف شنو يحتاجه كل ملف</p>
+            <h2 id="showcase-title">ترميم واحد، نتائج ذكية</h2>
+          </div>
+          <p>صفّي يقرأ نوع الصورة أولاً، ثم يركز على المشكلات التي تظهر فيها.</p>
+        </div>
+        <div className="showcase-grid">
+          <article className="showcase-card portrait-card">
+            <div className="showcase-image" style={{ backgroundImage: 'url(/saffi-gallery-v1.png)' }} />
+            <div className="showcase-copy"><span>بورتريه</span><strong>ملامح أوضح</strong><p>يعالج التشويش من دون ما يغيّر شخصية الوجه.</p></div>
+          </article>
+          <article className="showcase-card memory-card">
+            <div className="showcase-image" style={{ backgroundImage: 'url(/saffi-gallery-v1.png)' }} />
+            <div className="showcase-copy"><span>ذكرى قديمة</span><strong>لون ووضوح</strong><p>يعيد التوازن للصورة الباهتة ويحافظ على طابعها.</p></div>
+          </article>
+          <article className="showcase-card night-card">
+            <div className="showcase-image" style={{ backgroundImage: 'url(/saffi-gallery-v1.png)' }} />
+            <div className="showcase-copy"><span>لقطة ليلية</span><strong>تفاصيل أنظف</strong><p>يخفف التشويش ويوازن الإضاءة القاسية.</p></div>
+          </article>
         </div>
       </section>
 
@@ -419,6 +461,43 @@ export default function Home() {
                 : 'قاعدة العدّاد غير مهيّأة. المعالجة موقوفة حتى تُضبط، حمايةً للتكلفة.'}
             </span>
           </div>
+        )}
+
+        {hasCreativeOperations && !before && (
+          <section className="operation-picker" aria-labelledby="operation-title">
+            <div className="operation-heading">
+              <div>
+                <p className="section-kicker">خيار إضافي لمن يريد نتيجة مختلفة</p>
+                <h2 id="operation-title">اختَر التجربة المناسبة</h2>
+              </div>
+              <p>الترميم التلقائي هو الخيار الأساسي. كل خدمة توضح رصيدها قبل ما تبدأ.</p>
+            </div>
+            <div className="operation-list">
+              {operations.map((operation) => {
+                const selected = operation.id === selectedOperationId;
+                return (
+                  <button
+                    key={operation.id}
+                    type="button"
+                    className={selected ? 'operation is-selected' : 'operation'}
+                    onClick={() => setSelectedOperation(operation.id)}
+                    aria-pressed={selected}
+                    disabled={offline}
+                  >
+                    <span className="operation-check" aria-hidden="true">{selected ? '✓' : '○'}</span>
+                    <span className="operation-body">
+                      <strong>{operation.label}</strong>
+                      <small>{operation.hint}</small>
+                    </span>
+                    <span className="operation-units">
+                      <bdi dir="ltr">{operation.units}</bdi>
+                      <small>{operation.units === 1 ? ' من رصيدك اليومي' : ' وحدات من رصيدك اليومي'}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {!before ? (
@@ -446,7 +525,7 @@ export default function Home() {
             <button type="button" className="cta" onClick={() => fileInput.current?.click()} disabled={offline}>
               اختيار صورة
             </button>
-            <small className="drop-meta">JPG · PNG · WebP · HEIC — حتى 15 ميغابايت</small>
+            <small className="drop-meta">JPG · PNG · WebP · HEIC — حتى ١٥ ميغابايت</small>
           </div>
         ) : (
           <div className="work">
@@ -466,9 +545,12 @@ export default function Home() {
               </div>
               {elapsed !== null && (
                 <span className="chip">
-                  {elapsed < 950 ? `تمّت خلال أقل من ثانية` : `تمّت خلال ${(elapsed / 1000).toFixed(1)} ثانية`}
+                  {elapsed < 950
+                    ? 'تمّت خلال أقل من ثانية'
+                    : `تمّت خلال ${(elapsed / 1000).toLocaleString('ar-IQ', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ثانية`}
                 </span>
               )}
+              {activeOperation && <span className="chip operation-chip">{activeOperation.label}</span>}
             </div>
 
             <div className="frame" ref={frame}>
@@ -509,7 +591,7 @@ export default function Home() {
                 <div className="veil">
                   <span className="pulse" aria-hidden="true" />
                   <b>{stage === 'preparing' ? 'نجهّز الصورة…' : 'نرمّم الصورة…'}</b>
-                  <small>{stage === 'preparing' ? 'نضبط المقاس قبل الإرسال' : 'تأخذ عادةً بين 5 و20 ثانية'}</small>
+                  <small>{stage === 'preparing' ? 'نضبط المقاس قبل الإرسال' : 'نراجع التفاصيل ونحضّر النتيجة'}</small>
                 </div>
               )}
             </div>
@@ -570,7 +652,13 @@ export default function Home() {
       </section>
 
       <section className="how" id="how">
-        <h2>ثلاث خطوات</h2>
+        <div className="section-heading compact">
+          <div>
+            <p className="section-kicker">بلا إعدادات معقدة</p>
+            <h2>ثلاث خطوات فقط</h2>
+          </div>
+          <p>أنت تختار الصورة؛ والباقي يصير تلقائياً.</p>
+        </div>
         <ol>
           <li>
             <b>١</b>
@@ -594,6 +682,22 @@ export default function Home() {
             </div>
           </li>
         </ol>
+      </section>
+
+      <section className="capabilities" aria-labelledby="capabilities-title">
+        <div className="section-heading compact">
+          <div>
+            <p className="section-kicker">مسار المنتج</p>
+            <h2 id="capabilities-title">قدرات صفّي</h2>
+          </div>
+          <p>نطلق كل قدرة بعد اختبارها على صور حقيقية، حتى تكون النتيجة صادقة.</p>
+        </div>
+        <div className="capability-grid">
+          <article><span aria-hidden="true">✦</span><strong>تحسين تلقائي</strong><p>الأساس: وضوح، ألوان، وتوازن الصورة.</p><b>الآن</b></article>
+          <article><span aria-hidden="true">◌</span><strong>ترميم الوجوه</strong><p>توجيه خاص للصور الشخصية والذكريات.</p><b>قيد التفعيل</b></article>
+          <article><span aria-hidden="true">⌁</span><strong>الصور القديمة</strong><p>تنظيف البهتان وآثار الزمن بحذر.</p><b>قيد التفعيل</b></article>
+          <article><span aria-hidden="true">↗</span><strong>دقة أعلى</strong><p>مخرج مناسب للمشاركة والطباعة الصغيرة.</p><b>قيد التفعيل</b></article>
+        </div>
       </section>
 
       <footer>
