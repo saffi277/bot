@@ -6,6 +6,7 @@ type Stage = 'idle' | 'preparing' | 'processing' | 'done';
 type Shot = { url: string; width: number; height: number };
 type Operation = {
   id: string;
+  kind: 'enhance' | 'creative';
   label: string;
   hint: string;
   units: number;
@@ -362,6 +363,7 @@ export default function Home() {
   const busy = stage === 'preparing' || stage === 'processing';
   const offline = service !== null && !service.ready;
   const operations = service?.operations ?? [];
+  const hasCreativeOperations = operations.some((operation) => operation.kind === 'creative');
   const activeOperation = operations.find((operation) => operation.id === selectedOperationId);
 
   return (
@@ -461,14 +463,14 @@ export default function Home() {
           </div>
         )}
 
-        {operations.length > 0 && !before && (
+        {hasCreativeOperations && !before && (
           <section className="operation-picker" aria-labelledby="operation-title">
             <div className="operation-heading">
               <div>
-                <p className="section-kicker">اختَر نوع النتيجة</p>
-                <h2 id="operation-title">شنو نصلّح اليوم؟</h2>
+                <p className="section-kicker">خيار إضافي لمن يريد نتيجة مختلفة</p>
+                <h2 id="operation-title">اختَر التجربة المناسبة</h2>
               </div>
-              <p>كل خدمة توضح رصيدها قبل ما تبدأ.</p>
+              <p>الترميم التلقائي هو الخيار الأساسي. كل خدمة توضح رصيدها قبل ما تبدأ.</p>
             </div>
             <div className="operation-list">
               {operations.map((operation) => {
