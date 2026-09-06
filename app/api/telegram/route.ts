@@ -20,55 +20,32 @@ import { record } from '@/lib/usage-log';
 /** Longest edge Telegram itself compresses a photo to, near enough. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
-/** Three-step guide, walked with "next" buttons so nothing arrives as a wall of text. */
-const GUIDE = [
-  {
-    title: '١ · ارفع صورتك',
-    body: 'افتح الموقع واسحب الصورة، أو الصقها، أو اختَرها من جهازك.\n\nندعم JPG وPNG وWebP وHEIC (صيغة الآيفون) حتى ١٥ ميغابايت.',
-    next: 'وبعدين؟ ←',
-  },
-  {
-    title: '٢ · يشتغل عليها تلقائياً',
-    body: 'الذكاء الاصطناعي يشدّ ملامح الوجه، يرجّع تفاصيل الجلد والشعر، يشيل التشويش، ويصلّح الألوان الباهتة.\n\nبلا أدوات ولا ضبط يدوي — تأخذ عادةً بين ٥ و٢٠ ثانية.',
-    next: 'وبعدها؟ ←',
-  },
-  {
-    title: '٣ · قارن ونزّل',
-    body: 'اسحب المقبض بين الصورتين تشوف الفرق بعينك، وبعدها نزّل النتيجة.\n\nملاحظة: صفّي يرمّم الموجود بالصورة ويحافظ على ملامح الشخص — ما يخترع أشياء ناقصة.',
-    next: null,
-  },
-];
-
 /**
- * `next` is the step this keyboard advances TO, so the welcome can point at
- * step 0 and the guide steps at the one after them.
+ * One short answer, not a walked tour.
  *
- * The start parameter rides along in callback_data: without it the referral
- * tag is lost the moment the visitor taps anything, and every conversion after
- * the first message is attributed to nobody. Telegram caps callback_data at 64
- * bytes, hence the trim.
+ * This used to be three steps with next buttons, and every one of them
+ * described the website: open the site, drag the photo in, drag the handle to
+ * compare. None of that is what happens when someone uses the bot, and the
+ * owner asked for less explaining, not a longer explanation of the wrong
+ * thing.
  */
-function guideKeyboard(next: number | null, appUrl: string, startParameter?: string) {
-  const rows: Array<Array<Record<string, unknown>>> = [];
-  const tag = startParameter ? `:${startParameter.slice(0, 40)}` : '';
-  if (next !== null && GUIDE[next]) {
-    const label = next === 0 ? 'وريني شلون ←' : (GUIDE[next - 1]?.next as string);
-    rows.push([{ text: label, callback_data: `guide:${next}${tag}` }]);
-  }
-  rows.push([{ text: 'افتح صفّي ✦', url: siteLink(appUrl, startParameter) }]);
-  return { inline_keyboard: rows };
-}
-
-async function sendStep(token: string, appUrl: string, chatId: number, step: number, startParameter?: string) {
-  const entry = GUIDE[step];
-  if (!entry) return;
+async function sendHelp(token: string, appUrl: string, chatId: number, startParameter?: string) {
   await telegram(token, 'sendMessage', {
     chat_id: chatId,
-    text: `*${entry.title}*\n\n${entry.body}`,
+    text:
+      '*شلون يشتغل؟*\n\n' +
+      'دزّ صورة هنا — أي صورة قديمة أو مشوّشة أو ألوانها باهتة — وترجعلك محسّنة.\n\n' +
+      'الذكاء الاصطناعي يشدّ الملامح، يرجّع تفاصيل الجلد والشعر، يشيل التشويش، ويصلّح الألوان.\n\n' +
+      '• أرسلها *كصورة* لا كملف\n' +
+      '• صفّي يرمّم الموجود ويحافظ على ملامح الشخص — ما يخترع شي\n' +
+      '• وبالموقع تكدر تقارن قبل/بعد وتنزّل بدقة أعلى',
     parse_mode: 'Markdown',
-    reply_markup: guideKeyboard(entry.next ? step + 1 : null, appUrl, startParameter),
+    reply_markup: {
+      inline_keyboard: [[{ text: 'افتح صفّي ✦', url: siteLink(appUrl, startParameter) }]],
+    },
   });
 }
+
 
 /**
  * The first thing after /start: where does this person want to work? Both
@@ -91,7 +68,7 @@ async function sendWelcome(token: string, appUrl: string, message: TelegramMessa
       inline_keyboard: [
         [{ text: 'هنا بالبوت 🤖', callback_data: `here${tag}` }],
         [{ text: 'بالموقع ✦', url: siteLink(appUrl, startParameter) }],
-        [{ text: 'شلون يشتغل؟', callback_data: `guide:0${tag}` }],
+        [{ text: 'شلون يشتغل؟', callback_data: `guide${tag}` }],
       ],
     },
   });
@@ -180,7 +157,19 @@ async function restorePhoto(token: string, chatId: number, fileId: string, userI
       requestId,
     });
 
-    await sendPhoto(token, chatId, result.image, result.contentType, 'تفضّل — صورتك بعد الترميم ✦');
+    /**
+     * The caption states what is left.
+     *
+     * reserve() already returned it, and someone who has just spent one of a
+     * few daily photographs should not have to guess how many remain — the
+     * alternative is finding out by being refused.
+     */
+    const digits = (value: number) => String(value).replace(/[0-9]/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
+    const left =
+      verdict.remaining > 0
+        ? `باقي لك ${digits(verdict.remaining)} اليوم.`
+        : 'خلص رصيدك اليوم — يتجدّد باچر.';
+    await sendPhoto(token, chatId, result.image, result.contentType, `تفضّل — صورتك بعد الترميم ✦\n${left}`);
     await record({
       requestId,
       subject: subjectKey,
@@ -270,7 +259,7 @@ export async function POST(request: Request) {
     if (message?.text?.startsWith('/start')) {
       await sendWelcome(token, appUrl, message);
     } else if (message?.text?.startsWith('/help')) {
-      await sendStep(token, appUrl, message.chat.id, 0);
+      await sendHelp(token, appUrl, message.chat.id);
     }
 
     // A photo is the request itself. Telegram sends every size it made; the
@@ -297,15 +286,14 @@ export async function POST(request: Request) {
     if (update.callback_query) {
       const query = update.callback_query;
       await telegram(token, 'answerCallbackQuery', { callback_query_id: query.id });
-      const [kind, rawStep, startParameter] = query.data?.split(':') ?? [];
+      // `here:<ref>` or `guide:<ref>` — the ref rides along so a conversion
+      // is still attributed after the first tap.
+      const [kind, startParameter] = query.data?.split(':') ?? [];
 
       if (kind === 'here' && query.message) {
         await askForPhoto(token, query.message.chat.id);
       } else if (kind === 'guide' && query.message) {
-        const step = Number.parseInt(rawStep ?? '', 10);
-        if (Number.isInteger(step)) {
-          await sendStep(token, appUrl, query.message.chat.id, step, startParameter || undefined);
-        }
+        await sendHelp(token, appUrl, query.message.chat.id, startParameter || undefined);
       }
     }
 
