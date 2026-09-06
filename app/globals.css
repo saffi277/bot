@@ -52,3 +52,20 @@ footer { align-items:center; border-top:1px solid var(--line); display:flex; gap
 @media (max-width:780px) { .hero { grid-template-columns:1fr; min-height:0; padding-top:54px; text-align:center; }.eyebrow { justify-content:center; }.lede { margin-inline:auto; }.hero-visual { margin-top:-12px; max-width:270px; }.section-heading { align-items:start; flex-direction:column; gap:8px; }.section-heading > p { max-width:540px; }.showcase-grid,.capability-grid { grid-template-columns:repeat(2,1fr); }.how ol { grid-template-columns:1fr; } }
 @media (max-width:620px) { .bar { min-height:70px; }.bar-link,.brand-sub { display:none; }.bar-side { gap:10px; }.hero h1 { letter-spacing:-1.7px; }.hero-visual { max-width:240px; }.scan-card { height:78px; right:-8%; width:92px; }.showcase-grid,.capability-grid { grid-template-columns:1fr; }.showcase-card { min-height:280px; }.showcase-image { min-height:180px; }.operation-heading { align-items:start; flex-direction:column; gap:3px; }.operation { align-items:flex-start; flex-wrap:wrap; }.operation-body { flex:1; }.operation-units { margin-right:42px; width:calc(100% - 42px); }.operation-units small { max-width:none; }.frame { aspect-ratio:3 / 4; }.work-head { align-items:flex-start; flex-direction:column; gap:8px; }.work-actions { flex-direction:column-reverse; }.work-actions .ghost { width:100%; } footer { align-items:flex-start; flex-direction:column; gap:7px; } }
 @media (prefers-reduced-motion:reduce) { * { animation-duration:.01ms !important; transition-duration:.01ms !important; } html { scroll-behavior:auto; } }
+
+/* Services — pressed, not read. Each card chooses a service and opens the picker in one gesture. */
+.services { margin-top:6px; }
+.service-grid { display:grid; gap:11px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+.service-card { align-items:stretch; background:linear-gradient(160deg,rgba(19,43,74,.8),rgba(9,25,43,.75)); border:1px solid var(--line); border-radius:var(--radius); display:flex; flex-direction:column; gap:9px; overflow:hidden; padding:11px 11px 13px; text-align:start; transition:border-color .18s ease,transform .18s ease,box-shadow .18s ease; }
+.service-card:hover:not(:disabled) { border-color:rgba(129,244,204,.42); box-shadow:0 14px 32px rgba(0,0,0,.24); transform:translateY(-3px); }
+.service-card:disabled { cursor:not-allowed; opacity:.45; }
+.service-name { font-size:14.5px; font-weight:600; }
+.service-cost { color:var(--ink-faint); font-size:11.5px; font-variant-numeric:tabular-nums; unicode-bidi:plaintext; margin-top:-4px; }
+/* A tinted panel per service, so the grid reads as distinct choices without four more images to download. */
+.service-art { aspect-ratio:4/3; border:1px solid var(--line); border-radius:13px; position:relative; overflow:hidden; }
+.service-art::after { content:''; inset:0; position:absolute; background:radial-gradient(120% 90% at 30% 10%,rgba(255,255,255,.09),transparent 60%); }
+.service-restore .service-art { background:linear-gradient(140deg,#12324f,#0b2036 60%,#123f38); }
+.service-colorize .service-art { background:linear-gradient(140deg,#3a2340,#6d3550 45%,#c2734a); }
+.service-remove_objects .service-art { background:linear-gradient(140deg,#123b3a,#1d5a4c 55%,#2f7d5f); }
+.service-studio .service-art { background:linear-gradient(140deg,#1a2436,#33405a 60%,#4a5570); }
+@media (max-width:520px) { .service-grid { grid-template-columns:repeat(2,1fr); } }

@@ -189,6 +189,28 @@ export default function Home() {
     ? selectedOperation
     : (service?.operations?.[0]?.id ?? selectedOperation);
 
+  /**
+   * What the upload will actually send.
+   *
+   * Pressing a service card both chooses the service and opens the file
+   * dialog, so the choice and the upload happen in one gesture. Reading the
+   * service from React state there would make the request depend on a
+   * re-render landing before the dialog closes — usually true, since picking a
+   * file takes seconds, but a bet on timing all the same. Losing it means
+   * someone presses "colorize", is charged for it, and is handed a restore.
+   */
+  const pendingOperation = useRef(selectedOperationId);
+  useEffect(() => {
+    pendingOperation.current = selectedOperationId;
+  }, [selectedOperationId]);
+
+  /** Chooses a service and opens the picker in the same press. */
+  const startWithOperation = useCallback((id: string) => {
+    pendingOperation.current = id;
+    setSelectedOperation(id);
+    fileInput.current?.click();
+  }, []);
+
   // Object URLs are revoked on replacement and on unmount to avoid leaking blobs.
   useEffect(
     () => () => {
@@ -233,7 +255,7 @@ export default function Home() {
 
       const body = new FormData();
       body.append('image', new File([prepared.blob], 'upload.jpg', { type: 'image/jpeg' }));
-      body.append('operation', selectedOperationId);
+      body.append('operation', pendingOperation.current);
 
       try {
         const referral = readReferral();
@@ -271,7 +293,10 @@ export default function Home() {
         setError('انقطع الاتصال. تأكد من الإنترنت وجرّب مرة ثانية.');
       }
     },
-    [selectedOperationId, service],
+    // The chosen service is read from a ref, not from this closure, so it is
+    // deliberately absent here: rebuilding the handler on every choice is what
+    // created the race this change removes.
+    [service],
   );
 
   const accept = useCallback(
@@ -416,7 +441,7 @@ export default function Home() {
           <a className="hero-cta" href="#studio">ابدأ بالصورة <span aria-hidden="true">↙</span></a>
         </div>
         <div className="hero-visual" aria-label="أمثلة لصور يمكن لصفّي تحسينها">
-          <img className="hero-gallery" src="/saffi-gallery-v1.png" alt="لقطات بورتريه وذكرى عائلية وصورة ليلية" />
+          <img className="hero-gallery" src="/saffi-gallery-v1.webp" alt="لقطات بورتريه وذكرى عائلية وصورة ليلية" />
           <span className="orbital orbital-one">ترميم تلقائي</span>
           <span className="orbital orbital-two">يحفظ الملامح</span>
           <div className="scan-card" aria-hidden="true">
@@ -430,22 +455,20 @@ export default function Home() {
       <section className="showcase" aria-labelledby="showcase-title">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">يعرف شنو يحتاجه كل ملف</p>
             <h2 id="showcase-title">ترميم واحد، نتائج ذكية</h2>
           </div>
-          <p>صفّي يقرأ نوع الصورة أولاً، ثم يركز على المشكلات التي تظهر فيها.</p>
         </div>
         <div className="showcase-grid">
           <article className="showcase-card portrait-card">
-            <div className="showcase-image" style={{ backgroundImage: 'url(/saffi-gallery-v1.png)' }} />
+            <div className="showcase-image" style={{ backgroundImage: 'url(/card-portrait.webp)' }} />
             <div className="showcase-copy"><span>بورتريه</span><strong>ملامح أوضح</strong><p>يعالج التشويش من دون ما يغيّر شخصية الوجه.</p></div>
           </article>
           <article className="showcase-card memory-card">
-            <div className="showcase-image" style={{ backgroundImage: 'url(/saffi-gallery-v1.png)' }} />
+            <div className="showcase-image" style={{ backgroundImage: 'url(/card-memory.webp)' }} />
             <div className="showcase-copy"><span>ذكرى قديمة</span><strong>لون ووضوح</strong><p>يعيد التوازن للصورة الباهتة ويحافظ على طابعها.</p></div>
           </article>
           <article className="showcase-card night-card">
-            <div className="showcase-image" style={{ backgroundImage: 'url(/saffi-gallery-v1.png)' }} />
+            <div className="showcase-image" style={{ backgroundImage: 'url(/card-night.webp)' }} />
             <div className="showcase-copy"><span>لقطة ليلية</span><strong>تفاصيل أنظف</strong><p>يخفف التشويش ويوازن الإضاءة القاسية.</p></div>
           </article>
         </div>
@@ -464,38 +487,28 @@ export default function Home() {
         )}
 
         {hasCreativeOperations && !before && (
-          <section className="operation-picker" aria-labelledby="operation-title">
-            <div className="operation-heading">
-              <div>
-                <p className="section-kicker">خيار إضافي لمن يريد نتيجة مختلفة</p>
-                <h2 id="operation-title">اختَر التجربة المناسبة</h2>
-              </div>
-              <p>الترميم التلقائي هو الخيار الأساسي. كل خدمة توضح رصيدها قبل ما تبدأ.</p>
-            </div>
-            <div className="operation-list">
-              {operations.map((operation) => {
-                const selected = operation.id === selectedOperationId;
-                return (
-                  <button
-                    key={operation.id}
-                    type="button"
-                    className={selected ? 'operation is-selected' : 'operation'}
-                    onClick={() => setSelectedOperation(operation.id)}
-                    aria-pressed={selected}
-                    disabled={offline}
-                  >
-                    <span className="operation-check" aria-hidden="true">{selected ? '✓' : '○'}</span>
-                    <span className="operation-body">
-                      <strong>{operation.label}</strong>
-                      <small>{operation.hint}</small>
-                    </span>
-                    <span className="operation-units">
-                      <bdi dir="ltr">{operation.units}</bdi>
-                      <small>{operation.units === 1 ? ' من رصيدك اليومي' : ' وحدات من رصيدك اليومي'}</small>
-                    </span>
-                  </button>
-                );
-              })}
+          <section className="services" aria-labelledby="services-title">
+            <h2 id="services-title" className="sr-only">خدمات صفّي</h2>
+            <div className="service-grid">
+              {operations.map((operation) => (
+                <button
+                  key={operation.id}
+                  type="button"
+                  className={`service-card service-${operation.id}`}
+                  onClick={() => startWithOperation(operation.id)}
+                  disabled={offline}
+                  // The press opens the file dialog, so the label says that
+                  // rather than describing a selection the visitor never makes.
+                  aria-label={`${operation.label} — اختر صورة`}
+                >
+                  <span className="service-art" aria-hidden="true" />
+                  <span className="service-name">{operation.label}</span>
+                  <span className="service-cost">
+                    <bdi dir="ltr">{operation.units}</bdi>
+                    {operation.units === 1 ? ' صورة' : ' صور'}
+                  </span>
+                </button>
+              ))}
             </div>
           </section>
         )}
@@ -654,10 +667,8 @@ export default function Home() {
       <section className="how" id="how">
         <div className="section-heading compact">
           <div>
-            <p className="section-kicker">بلا إعدادات معقدة</p>
             <h2>ثلاث خطوات فقط</h2>
           </div>
-          <p>أنت تختار الصورة؛ والباقي يصير تلقائياً.</p>
         </div>
         <ol>
           <li>
@@ -687,7 +698,6 @@ export default function Home() {
       <section className="capabilities" aria-labelledby="capabilities-title">
         <div className="section-heading compact">
           <div>
-            <p className="section-kicker">مسار المنتج</p>
             <h2 id="capabilities-title">قدرات صفّي</h2>
           </div>
           <p>نطلق كل قدرة بعد اختبارها على صور حقيقية، حتى تكون النتيجة صادقة.</p>
