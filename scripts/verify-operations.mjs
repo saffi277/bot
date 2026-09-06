@@ -95,6 +95,24 @@ assert.doesNotMatch(
   'The prompt tells the model to return a soft face, which is the one thing it must not do',
 );
 
+/**
+ * Every operation that can see a face must protect it. A creative service is
+ * exactly where this gets forgotten — the visible goal there is a different
+ * picture, and "different" is one careless prompt away from "different person".
+ */
+for (const operation of OPERATIONS) {
+  assert.match(
+    operation.prompt,
+    /identity of every person must survive unchanged/i,
+    `${operation.id}: prompt does not protect the subject's identity`,
+  );
+  assert.match(
+    operation.prompt,
+    /no added border|no border/i,
+    `${operation.id}: prompt does not forbid added borders and watermarks`,
+  );
+}
+
 const enhance = OPERATIONS.filter((o) => o.kind === 'enhance');
 const creative = OPERATIONS.filter((o) => o.kind === 'creative');
 const worst = Math.max(...OPERATIONS.map((o) => o.units));

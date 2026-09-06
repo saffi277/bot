@@ -1,6 +1,7 @@
 import { GeminiProvider } from '@/lib/enhance/gemini';
 import { EnhanceProvider, ProviderError } from '@/lib/enhance/provider';
 import { catalogue, findOperation } from '@/lib/enhance/operations';
+import { SIGNATURE_BYTES, sniffImageType } from '@/lib/image-type';
 import { limits, peek, release, reserve, Subject } from '@/lib/ratelimit';
 import { getConfig } from '@/lib/telegram';
 import { readCookie, TelegramIdentity } from '@/lib/telegram-auth';
@@ -17,7 +18,6 @@ import { record } from '@/lib/usage-log';
 // Matches the ceiling the page and the bot both advertise. It disagreed at 12
 // before, so a size the product promised to accept was refused by the server.
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
 
 function maxOutputEdge(): number {
   const parsed = Number.parseInt(process.env.MAX_OUTPUT_EDGE ?? '', 10);
@@ -109,11 +109,20 @@ export async function POST(request: Request) {
   if (!operation) {
     return fail('الخدمة المطلوبة غير متوفرة.', 400, { code: 'unknown_operation' });
   }
-  if (!ACCEPTED.includes(file.type)) {
-    return fail('ندعم صور JPG وPNG وWebP فقط.', 415, { code: 'bad_type' });
-  }
   if (file.size > MAX_UPLOAD_BYTES) {
     return fail('حجم الصورة كبير. المسموح حتى ١٥ ميغابايت.', 413, { code: 'too_large' });
+  }
+
+  /**
+   * Trust the bytes, not the label. `file.type` is whatever the client wrote
+   * in the multipart header, so without this a stranger could send anything at
+   * all as `image/jpeg` and spend the daily budget on it. Only a header slice
+   * is read, and the sniffed type — never the claimed one — is forwarded.
+   */
+  const bytes = await file.arrayBuffer();
+  const contentType = sniffImageType(bytes.slice(0, SIGNATURE_BYTES));
+  if (!contentType) {
+    return fail('ندعم صور JPG وPNG وWebP فقط.', 415, { code: 'bad_type' });
   }
 
   // Reserve before any spending can happen, for what this operation costs.
@@ -134,8 +143,8 @@ export async function POST(request: Request) {
 
   try {
     const result = await service.enhance({
-      image: await file.arrayBuffer(),
-      inputContentType: file.type,
+      image: bytes,
+      inputContentType: contentType,
       maxOutputEdge: maxOutputEdge(),
       prompt: operation.prompt,
       requestId,

@@ -227,6 +227,19 @@ async function runAfterResponse(work: Promise<unknown>): Promise<void> {
   await work;
 }
 
+/**
+ * Compares in time that does not depend on where the first difference is.
+ * `!==` returns as soon as two bytes differ, which leaks the matching prefix
+ * length to anyone who can measure replies. Impractical over the internet, but
+ * the correct comparison costs nothing and the token it guards controls the bot.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 export async function GET() {
   const { token, botUsername } = getConfig();
   return Response.json({
@@ -245,7 +258,7 @@ export async function POST(request: Request) {
   // the check below was skipped entirely and anyone who learned the URL could
   // drive the bot. Fail closed, like every other gate here (CLAUDE.md §6).
   if (!secret) return Response.json({ error: 'Telegram bot is not configured yet.' }, { status: 503 });
-  if (request.headers.get('x-telegram-bot-api-secret-token') !== secret) {
+  if (!constantTimeEqual(request.headers.get('x-telegram-bot-api-secret-token') ?? '', secret)) {
     return Response.json({ error: 'Unauthorized webhook request.' }, { status: 401 });
   }
 

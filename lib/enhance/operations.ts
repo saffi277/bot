@@ -95,6 +95,21 @@ export const RESTORE_PROMPT = [
   'Return only the restored photograph, with no added border, frame, margin, watermark, signature or decoration, and keep the original framing and aspect ratio.',
 ].join(' ');
 
+/**
+ * Repeated verbatim by every operation that can see a face.
+ *
+ * A service that hands back a sharper, better-lit, differently-dressed person
+ * who is not quite the one in the photograph has failed completely, however
+ * good the picture looks. Stating it once means a new service cannot be added
+ * having quietly left it out.
+ */
+const IDENTITY_RULE =
+  'The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, skin tone, or the position and spacing of the eyes, nose and mouth. Do not beautify: no skin smoothing, no reshaping, no added makeup, no teeth whitening, no slimming.';
+
+/** Providers like to add frames and captions unless told not to. */
+const OUTPUT_RULE =
+  'Return only the resulting photograph, with no added border, frame, margin, watermark, signature, caption or decoration, and keep the original framing and aspect ratio.';
+
 export const OPERATIONS: readonly Operation[] = [
   {
     id: 'restore',
@@ -104,9 +119,52 @@ export const OPERATIONS: readonly Operation[] = [
     units: 1,
     prompt: RESTORE_PROMPT,
   },
-  // Creative services go here as they are decided. Each one needs a name, a
-  // line of copy, and an honest unit count — and the unit count is the part
-  // that must not be guessed, because it is the owner's money.
+  {
+    id: 'colorize',
+    kind: 'creative',
+    label: 'تلوين صورة قديمة',
+    hint: 'يحوّل الأبيض والأسود إلى ألوان طبيعية، بلا تغيير أي ملمح',
+    units: 1,
+    prompt: [
+      'Colorize this black and white photograph.',
+      'Choose colours that are plausible for the period, the place and the materials shown: natural skin tones for the apparent ethnicity, believable dyes for clothing, and correct colours for skin, hair, wood, metal, foliage and sky.',
+      'Keep every shape, edge and tone relationship exactly where it is. This is colour added to an existing photograph, not a new picture.',
+      IDENTITY_RULE,
+      'Do not sharpen, denoise, retouch or repair damage — colour only.',
+      'Avoid oversaturation and colour bleeding across edges; aim for a restrained, photographic result rather than a vivid one.',
+      OUTPUT_RULE,
+    ].join(' '),
+  },
+  {
+    id: 'remove_objects',
+    kind: 'creative',
+    label: 'إزالة عناصر زائدة',
+    hint: 'يشيل الأشياء والأشخاص غير المرغوبين من الخلفية ويكمّل المكان خلفهم',
+    units: 1,
+    prompt: [
+      'Remove distracting elements from the background of this photograph: passers-by, litter, poles, wires, signs and clutter that are clearly not part of the subject.',
+      'Reconstruct what was behind each removed element from the surrounding scene, so the result looks like a photograph taken without them rather than one with patches in it.',
+      'Keep the main subject or subjects entirely untouched — do not remove, move, resize or alter any person the photograph is of.',
+      IDENTITY_RULE,
+      'Preserve the original composition, framing, lighting and perspective.',
+      OUTPUT_RULE,
+    ].join(' '),
+  },
+  {
+    id: 'studio',
+    kind: 'creative',
+    label: 'خلفية استوديو',
+    hint: 'يعزل الشخص ويحطّه على خلفية استوديو نظيفة، مناسبة للصور الرسمية',
+    units: 1,
+    prompt: [
+      'Replace the background of this photograph with a clean, neutral studio backdrop in a soft dark grey with gentle falloff, as used for a formal portrait.',
+      'Cut around the subject accurately, including hair strands, glasses and the edges of clothing. No halo, no leftover fringe of the old background.',
+      'Relight the subject only as much as is needed to sit believably against the new backdrop; do not restyle, recolour or reshape them.',
+      IDENTITY_RULE,
+      'Keep the subject at the same size, pose and position in the frame.',
+      OUTPUT_RULE,
+    ].join(' '),
+  },
 ];
 
 /**

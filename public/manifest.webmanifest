@@ -1,0 +1,19 @@
+{
+  "name": "صفّي — ترميم وتحسين الصور",
+  "short_name": "صفّي",
+  "description": "ارفع صورتك القديمة أو المشوّشة وترجعلك أوضح، بالذكاء الاصطناعي.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/?src=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#040a14",
+  "theme_color": "#040a14",
+  "categories": ["photo", "utilities", "graphics"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
