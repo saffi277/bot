@@ -69,6 +69,23 @@ export function siteLink(appUrl: string, startParameter?: string): string {
 }
 
 /**
+ * Why a download can fail in a way worth telling the visitor about.
+ *
+ * `too_large` is the only one the person can act on — everything else is ours
+ * to apologise for — so it is separated rather than folded into a generic
+ * Error the caller would have to match on message text.
+ */
+export class TelegramFileError extends Error {
+  constructor(
+    readonly code: 'too_large' | 'unavailable',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'TelegramFileError';
+  }
+}
+
+/**
  * Downloads a file the visitor sent. Telegram keeps files on a second host,
  * reachable only after getFile resolves the path.
  *
@@ -77,22 +94,54 @@ export function siteLink(appUrl: string, startParameter?: string): string {
  * the browser's canvas downscale on this path — there is no canvas in a
  * Worker, and sending a phone original straight to the provider would multiply
  * the bill about fifteen times.
+ *
+ * `maxBytes` is checked against the size Telegram reports *before* any bytes
+ * are pulled. The size was previously read only after the whole file had been
+ * buffered, which meant a file we were always going to refuse was still
+ * downloaded in full into a Worker whose memory is shared with the image about
+ * to be sent to the provider. Refusing first costs nothing and cannot run the
+ * runtime out of memory.
  */
-export async function downloadFile(token: string, fileId: string): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+export async function downloadFile(
+  token: string,
+  fileId: string,
+  maxBytes = Infinity,
+): Promise<{ bytes: ArrayBuffer; contentType: string }> {
   const lookup = await fetch(`${API_BASE}${token}/getFile?file_id=${encodeURIComponent(fileId)}`);
-  const payload = (await lookup.json()) as { ok: boolean; result?: { file_path?: string }; description?: string };
+  const payload = (await lookup.json()) as {
+    ok: boolean;
+    result?: { file_path?: string; file_size?: number };
+    description?: string;
+  };
   if (!payload.ok || !payload.result?.file_path) {
-    throw new Error(`getFile failed: ${payload.description ?? lookup.status}`);
+    throw new TelegramFileError('unavailable', `getFile failed: ${payload.description ?? lookup.status}`);
+  }
+
+  const declared = payload.result.file_size;
+  if (typeof declared === 'number' && declared > maxBytes) {
+    throw new TelegramFileError('too_large', `file is ${declared} bytes, over the ${maxBytes} limit`);
   }
 
   // The file host mirrors whatever API_BASE points at, so a stubbed base in
   // tests serves the download too.
   const base = API_BASE.replace(/\/bot$/, '/file/bot');
   const file = await fetch(`${base}${token}/${payload.result.file_path}`);
-  if (!file.ok) throw new Error(`file download failed with ${file.status}`);
+  if (!file.ok) throw new TelegramFileError('unavailable', `file download failed with ${file.status}`);
+
+  // getFile can omit file_size. The response header is the second chance to
+  // refuse before buffering, so an unreported size is not an unbounded read.
+  const announced = Number.parseInt(file.headers.get('content-length') ?? '', 10);
+  if (Number.isFinite(announced) && announced > maxBytes) {
+    throw new TelegramFileError('too_large', `file is ${announced} bytes, over the ${maxBytes} limit`);
+  }
+
+  const bytes = await file.arrayBuffer();
+  if (bytes.byteLength > maxBytes) {
+    throw new TelegramFileError('too_large', `file is ${bytes.byteLength} bytes, over the ${maxBytes} limit`);
+  }
 
   return {
-    bytes: await file.arrayBuffer(),
+    bytes,
     contentType: file.headers.get('content-type') || 'image/jpeg',
   };
 }

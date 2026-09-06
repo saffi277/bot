@@ -2,7 +2,17 @@ import { GeminiProvider } from '@/lib/enhance/gemini';
 import { findOperation } from '@/lib/enhance/operations';
 import { ProviderError } from '@/lib/enhance/provider';
 import { release, reserve } from '@/lib/ratelimit';
-import { downloadFile, getConfig, sendPhoto, siteLink, telegram, TelegramMessage, TelegramUpdate } from '@/lib/telegram';
+import { SIGNATURE_BYTES, sniffImageType } from '@/lib/image-type';
+import {
+  downloadFile,
+  getConfig,
+  sendPhoto,
+  siteLink,
+  telegram,
+  TelegramFileError,
+  TelegramMessage,
+  TelegramUpdate,
+} from '@/lib/telegram';
 import { record } from '@/lib/usage-log';
 
 /**
@@ -153,14 +163,53 @@ async function restorePhoto(token: string, chatId: number, fileId: string, userI
   const requestId = crypto.randomUUID();
   const subjectKey = `user:${userId}`;
 
+  /**
+   * Fetching and vetting the photograph, kept separate from the model call so
+   * each failure gets the sentence that fits it. Everything here happens with
+   * a unit already reserved, so every exit refunds it.
+   */
+  let bytes: ArrayBuffer;
+  let contentType: string;
   try {
-    const { bytes, contentType } = await downloadFile(token, fileId);
-    if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+    const file = await downloadFile(token, fileId, MAX_UPLOAD_BYTES);
+    bytes = file.bytes;
+
+    /**
+     * Trust the bytes, not the label — the same rule the website path follows.
+     * The type used to come from the file host's content-type header, which is
+     * a claim about the file rather than a reading of it: Telegram serves
+     * `application/octet-stream` often enough, and forwarding that made the
+     * provider reject a photograph that was perfectly fine. Sniffing decides
+     * it here instead of letting a header decide it for us.
+     */
+    const sniffed = sniffImageType(bytes.slice(0, SIGNATURE_BYTES));
+    if (!sniffed) {
       await release(subject, operation.units);
-      await telegram(token, 'sendMessage', { chat_id: chatId, text: 'الصورة كبيرة. المسموح حتى ١٥ ميغابايت.' });
+      await telegram(token, 'sendMessage', {
+        chat_id: chatId,
+        text: 'هذا الملف مو صورة نعرف نقراها. ندعم JPG وPNG وWebP. رصيدك ما انخصم.',
+      });
       return;
     }
+    contentType = sniffed;
+  } catch (error) {
+    await release(subject, operation.units);
+    const text =
+      error instanceof TelegramFileError && error.code === 'too_large'
+        ? 'الصورة كبيرة. المسموح حتى ١٥ ميغابايت. رصيدك ما انخصم.'
+        : 'ما گدرنا نجيب الصورة من تلگرام. جرّب ترسلها مرة ثانية — رصيدك ما انخصم.';
+    await telegram(token, 'sendMessage', { chat_id: chatId, text }).catch(() => undefined);
+    await record({
+      requestId,
+      subject: subjectKey,
+      status: 'error',
+      detail: error instanceof Error ? error.message : String(error),
+      referral: 'telegram-bot',
+    });
+    return;
+  }
 
+  try {
     const result = await service.enhance({
       image: bytes,
       inputContentType: contentType,
