@@ -58,6 +58,11 @@ const MANAGED = [
     note: 'Change to the deployed site address.',
   },
   {
+    key: 'ADMIN_TOKEN',
+    value: secret,
+    note: 'Generated. Opens /api/stats, which reports usage and spending.',
+  },
+  {
     key: 'GEMINI_API_KEY',
     value: '',
     // Written blank on purpose. Omitting the line entirely made a filled file
