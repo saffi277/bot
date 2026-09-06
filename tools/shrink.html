@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Shrink a photo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #040a14; color: #e8eef7;
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  main { width: min(560px, 100%); text-align: center; }
+  h1 { font-size: 1.35rem; margin: 0 0 .35rem; }
+  p.sub { margin: 0 0 1.5rem; color: #8fa3bd; font-size: .95rem; }
+  #drop {
+    border: 2px dashed #2b415f; border-radius: 16px; padding: 44px 20px;
+    background: #0a1526; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #drop:hover, #drop.over { border-color: #4d7cc0; background: #0e1c31; }
+  #drop strong { display: block; font-size: 1.05rem; margin-bottom: .3rem; }
+  #drop span { color: #8fa3bd; font-size: .9rem; }
+  label { display: block; margin: 1.5rem 0 .4rem; color: #8fa3bd; font-size: .9rem; }
+  input[type=range] { width: 100%; accent-color: #4d7cc0; }
+  #out { margin-top: 1.5rem; min-height: 1.5rem; font-size: .95rem; }
+  #out b { color: #7fd6a2; }
+  img { max-width: 100%; border-radius: 12px; margin-top: 1rem; }
+  a.dl {
+    display: inline-block; margin-top: 1rem; padding: .7rem 1.4rem; border-radius: 10px;
+    background: #4d7cc0; color: #fff; text-decoration: none; font-weight: 600;
+  }
+  .note { margin-top: 2rem; color: #61748f; font-size: .82rem; }
+</style>
+
+<main>
+  <h1>Shrink a photo</h1>
+  <p class="sub">For demos that refuse large images (the 4-megapixel limit).</p>
+
+  <div id="drop">
+    <strong>Click here, or drag a photo in</strong>
+    <span>Nothing is uploaded — this runs inside your browser.</span>
+  </div>
+  <input type="file" id="file" accept="image/*" hidden>
+
+  <label>Longest edge: <b id="sizeLabel">1500</b> px</label>
+  <input type="range" id="size" min="600" max="3000" step="100" value="1500">
+
+  <div id="out"></div>
+
+  <p class="note">
+    Offline and private: the photo never leaves this machine.
+    Open this file directly — no server needed.
+  </p>
+</main>
+
+<script>
+  const drop = document.getElementById('drop');
+  const file = document.getElementById('file');
+  const size = document.getElementById('size');
+  const sizeLabel = document.getElementById('sizeLabel');
+  const out = document.getElementById('out');
+  let current = null;
+
+  size.oninput = () => { sizeLabel.textContent = size.value; if (current) shrink(current); };
+  drop.onclick = () => file.click();
+  file.onchange = () => file.files[0] && shrink(file.files[0]);
+
+  drop.ondragover = (event) => { event.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = (event) => {
+    event.preventDefault();
+    drop.classList.remove('over');
+    const dropped = event.dataTransfer.files[0];
+    if (dropped) shrink(dropped);
+  };
+
+  const mp = (w, h) => (w * h / 1e6).toFixed(1);
+
+  function shrink(blob) {
+    current = blob;
+    const image = new Image();
+    image.onload = () => {
+      const max = Number(size.value);
+      // Only ever scales down: enlarging a photo to hit a target adds no
+      // detail and makes the file bigger for nothing.
+      const scale = Math.min(1, max / Math.max(image.width, image.height));
+      const w = Math.round(image.width * scale);
+      const h = Math.round(image.height * scale);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const context = canvas.getContext('2d');
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(image, 0, 0, w, h);
+
+      canvas.toBlob((small) => {
+        const url = URL.createObjectURL(small);
+        const before = `${image.width}x${image.height} (${mp(image.width, image.height)} MP)`;
+        const after = `${w}x${h} (${mp(w, h)} MP)`;
+        const kb = Math.round(small.size / 1024);
+        out.innerHTML =
+          `${before} &rarr; <b>${after}</b>, ${kb} KB` +
+          `<br><a class="dl" href="${url}" download="small.jpg">Save small.jpg</a>` +
+          `<br><img src="${url}" alt="">`;
+      }, 'image/jpeg', 0.95);
+    };
+    image.src = URL.createObjectURL(blob);
+  }
+</script>
