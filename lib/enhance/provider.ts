@@ -26,6 +26,18 @@ export type EnhanceRequest = {
   prompt: string;
   /** Trace id carried through logs and into the provider call. */
   requestId: string;
+  /**
+   * How long to wait before giving up, in milliseconds. Optional; the provider
+   * picks a default.
+   *
+   * It exists because the two callers have different deadlines. A browser will
+   * happily wait a minute and a half with a spinner on screen. Work continued
+   * after a Telegram webhook has already replied runs on borrowed time the
+   * platform bounds, and if it is cut off mid-call the visitor is charged,
+   * receives nothing, and gets no error either — the whole isolate is gone
+   * before anything can be sent. Better to give up first and say so.
+   */
+  timeoutMs?: number;
 };
 
 export type EnhanceResult = {

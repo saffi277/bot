@@ -101,7 +101,7 @@ export class GeminiProvider implements EnhanceProvider {
 
     const startedAt = Date.now();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? REQUEST_TIMEOUT_MS);
 
     let response: Response;
     try {

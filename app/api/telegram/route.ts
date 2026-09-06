@@ -21,6 +21,18 @@ import { record } from '@/lib/usage-log';
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 /**
+ * Deadline for a restoration started from the bot.
+ *
+ * Shorter than the provider's own 90s allowance on purpose. This work runs
+ * after the webhook has already answered, on time the platform bounds, and
+ * being cut off there is the worst outcome available: the visitor is charged,
+ * gets no photograph, and gets no message either, because nothing survives to
+ * send one. Giving up first means the failure is ours to explain. Typical
+ * restorations finish in well under this (docs/DISCUSSION.md).
+ */
+const BOT_TIMEOUT_MS = 28_000;
+
+/**
  * One short answer, not a walked tour.
  *
  * This used to be three steps with next buttons, and every one of them
@@ -155,6 +167,7 @@ async function restorePhoto(token: string, chatId: number, fileId: string, userI
       maxOutputEdge: maxOutputEdge(),
       prompt: operation.prompt,
       requestId,
+      timeoutMs: BOT_TIMEOUT_MS,
     });
 
     /**
@@ -189,7 +202,9 @@ async function restorePhoto(token: string, chatId: number, fileId: string, userI
     const text =
       error instanceof ProviderError && error.code === 'rejected'
         ? 'ما گدرنا نعالج هذي الصورة. رصيدك ما انخصم — جرّب صورة ثانية.'
-        : 'صار خلل أثناء المعالجة. جرّب مرة ثانية بعد شوي.';
+        : error instanceof ProviderError && error.code === 'timeout'
+          ? 'الصورة أخذت وقت أطول من المتوقّع فوقفناها. جرّب صورة أصغر، أو من الموقع.'
+          : 'صار خلل أثناء المعالجة. جرّب مرة ثانية بعد شوي.';
     await telegram(token, 'sendMessage', { chat_id: chatId, text }).catch(() => undefined);
   }
 }
