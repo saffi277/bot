@@ -62,17 +62,25 @@ for (const entry of catalogue()) {
 }
 
 /**
- * The restoration prompt carries two promises that must never be edited away,
- * and they pull against each other — which is why both are checked.
+ * The restoration prompt carries promises that pull against each other, which
+ * is why each is checked separately rather than trusting one sentence.
  *
  * It must sharpen faces, because a soft face in a sharp image is the failure
- * everyone opening this kind of tool is trying to escape. And it must hold the
- * person's identity fixed, because a face that came back sharper but belonging
- * to someone else is worse than no restoration at all.
+ * everyone opening this kind of tool is trying to escape.
+ *
+ * It must grade the photograph — exposure, contrast, colour, skin brightness —
+ * because that grade is most of what a customer perceives as quality, and an
+ * earlier version of this prompt banned all of it outright.
+ *
+ * And it must hold the person's geometry fixed, because a face that came back
+ * brighter and better lit but belonging to someone else is worse than no
+ * restoration at all. The permission to improve appearance is exactly what
+ * makes this check necessary: it is one careless edit away from permission to
+ * reshape.
  *
  * The assertions match on meaning rather than on one sentence: an earlier
- * version of this check was pinned to exact wording, and it fired when the
- * prompt was corrected rather than when it was broken.
+ * version was pinned to exact wording and fired when the prompt was corrected
+ * rather than when it was broken.
  */
 assert.match(
   RESTORE_PROMPT,
@@ -86,8 +94,32 @@ assert.match(
 );
 assert.match(
   RESTORE_PROMPT,
-  /do not beautify/i,
-  'The prompt no longer forbids beautifying, so the result may not look like the person',
+  /do not reshape or slim/i,
+  'The prompt no longer forbids reshaping, so a brighter result may be a different person',
+);
+assert.match(
+  RESTORE_PROMPT,
+  /moles, freckles, scars/i,
+  'The prompt no longer protects the marks that make a face that person\'s',
+);
+// Brightening skin without this becomes a plastic mask, which is the exact
+// complaint against tools in this category.
+assert.match(
+  RESTORE_PROMPT,
+  /pores/i,
+  'The prompt brightens skin without requiring that it still look like skin',
+);
+// The owner compared two Remini frames and asked for this specifically:
+// colour, contrast and brightness are most of the perceived quality.
+assert.match(
+  RESTORE_PROMPT,
+  /\bcontrast\b/i,
+  'The prompt no longer grades the photograph, which is most of what a customer sees',
+);
+assert.match(
+  RESTORE_PROMPT,
+  /depth of field/i,
+  'The prompt no longer protects the background blur, so results look synthetic',
 );
 assert.doesNotMatch(
   RESTORE_PROMPT,
@@ -110,6 +142,13 @@ for (const operation of OPERATIONS) {
     operation.prompt,
     /no added border|no border/i,
     `${operation.id}: prompt does not forbid added borders and watermarks`,
+  );
+  // Every service may improve how a photograph looks. None may redraw the
+  // person in it, and a creative service is where that gets forgotten.
+  assert.match(
+    operation.prompt,
+    /do not reshape or slim/i,
+    `${operation.id}: prompt permits reshaping the person`,
   );
 }
 

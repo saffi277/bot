@@ -59,36 +59,52 @@ export type Operation = {
 /**
  * The most important string in the product.
  *
- * It has been wrong twice, in opposite directions. First it told the model to
- * preserve the source wherever detail was unclear, which on a photograph
- * missing a third of its emulsion means leaving the holes — no restoration at
- * all. Then the correction overshot: "if facial detail is lost, leave it soft"
- * instructed the model to hand back a blurred face, which is the one thing the
- * owner is asking for and the single reason anyone opens Remini. A sharp
- * background around a soft face is not a restored photograph.
+ * It has been wrong three times, and each correction overshot the last.
  *
- * The distinction that actually holds is recover versus replace. Every feature
- * the photograph contains, however faintly, is brought into focus — that is
- * the product. What is genuinely absent is not fabricated, because a rebuilt
- * face is a different person and that breaks the promise entirely.
+ * First it told the model to preserve the source wherever detail was unclear,
+ * which on a damaged photograph means leaving the holes — no restoration at
+ * all. Then "if facial detail is lost, leave it soft" instructed the model to
+ * hand back a blurred face, the one thing the product exists to prevent.
  *
- * Beautifying is refused separately and on purpose. Smoothing skin, reshaping
- * a jaw or whitening teeth all raise the same complaint against tools in this
- * category: the person in the result is not the person in the photograph. The
- * owner asked for light adjustment, and restraint is part of the instruction
- * rather than something hoped for.
+ * The third was mine and lasted longest: a blanket "do not beautify", banning
+ * skin smoothing, tone changes and anything that made a person look better
+ * lit. It was written to stop the failure everyone complains about in this
+ * category — a result that is prettier and is not the same person. But the
+ * owner put two Remini frames side by side (2026-09-06) and the ban was
+ * plainly too wide: what Remini does is not only sharpening. It grades the
+ * photograph — lifts exposure, deepens blacks, warms the white balance,
+ * enriches colour, brightens and evens skin — and that grade is most of what
+ * the customer sees and calls quality.
+ *
+ * So the line is no longer "beautify or not". It is geometry against
+ * appearance:
+ *
+ *   Fixed, because changing it produces a different person: face shape,
+ *   proportions, feature placement, age, expression, hairline, the moles and
+ *   scars and lines that make the face theirs.
+ *
+ *   Free, because it is what a photographer does in any darkroom: exposure,
+ *   contrast, white balance, saturation, and the brightness and evenness of
+ *   skin.
+ *
+ * One rule is subtler and comes straight from the comparison: the background
+ * in the good frame stayed out of focus. Remini resolved the detail inside
+ * the lens blur without flattening it into a sharp background. Sharpening
+ * everything equally is what makes a restoration look synthetic, so the
+ * original depth of field is protected explicitly.
  *
  * Only a real key can settle whether this reads as well to the model as it
  * does to us. `npm run bakeoff` exists for exactly that comparison.
  */
 export const RESTORE_PROMPT = [
-  'Restore and enhance this photograph.',
-  'Bring the entire image into sharp focus: recover fine detail and the real texture of skin, hair and fabric, and remove blur, softness, noise and compression artifacts.',
+  'Restore, enhance and finish this photograph the way a professional photo editor would.',
+  'Bring the subject into crisp focus: recover fine detail and the real texture of skin, hair and fabric, and remove blur, softness, noise and compression artifacts.',
   'Faces are the priority. Bring every face into clear, natural focus — recover the eyes, eyebrows, lashes, lips, hair and skin texture the photograph already contains, however faintly. Never hand back a soft face in a sharp image.',
   'Recover, do not replace: sharpen the features that are present rather than substituting new ones. Where detail is genuinely absent, stay restrained and plausible instead of inventing a different face.',
-  'The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, skin tone, or the position and spacing of the eyes, nose and mouth.',
-  'Do not beautify: no skin smoothing that erases pores, freckles or wrinkles, no reshaping, no added makeup, no teeth whitening, no slimming. The person must remain recognisably themselves.',
-  'Correct faded or shifted colours and white balance with a light hand, keeping skin tones natural and avoiding oversaturation.',
+  'Preserve the original depth of field. A background that was softly out of focus must stay softly out of focus — resolve the detail within it, but never flatten the lens blur into a uniformly sharp image.',
+  'Grade the photograph so it reads rich and professional rather than flat and dull: lift the exposure, deepen the blacks, add contrast and local clarity for depth, warm the white balance slightly, and make the colours cleaner and more vivid while keeping them believable. Whites should read bright and clean, not grey.',
+  'Brighten and even the skin: lift its brightness, warm it a little, and smooth away dullness, blotchiness and harsh shadow so the face looks clear and well lit. Keep it skin — pores, stubble and natural texture must remain visible, and the complexion must stay recognisably that person\'s own, only better lit.',
+  'The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, hairline, or the position and spacing of the eyes, nose and mouth. Do not reshape or slim the face or body, and do not erase what makes the face theirs: moles, freckles, scars and the natural lines of expression stay.',
   'Repair physical damage — tears, cracks, missing emulsion, scratches, stains, fading — by reconstructing what the surrounding image implies.',
   'Preserve the original composition, framing, pose, clothing and background.',
   'Do not add objects, people or elements that the original does not imply.',
@@ -104,7 +120,7 @@ export const RESTORE_PROMPT = [
  * having quietly left it out.
  */
 const IDENTITY_RULE =
-  'The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, skin tone, or the position and spacing of the eyes, nose and mouth. Do not beautify: no skin smoothing, no reshaping, no added makeup, no teeth whitening, no slimming.';
+  'The identity of every person must survive unchanged — do not alter face shape, proportions, age, expression, hairline, or the position and spacing of the eyes, nose and mouth. Do not reshape or slim the face or body, and do not erase the moles, freckles, scars and lines of expression that make the face theirs. Lighting, colour and skin brightness may be improved; the person may not be replaced.';
 
 /** Providers like to add frames and captions unless told not to. */
 const OUTPUT_RULE =
