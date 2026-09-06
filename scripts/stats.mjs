@@ -62,6 +62,22 @@ for (const w of payload.windows) {
   if (top) console.log(`  came from  : ${top}`);
 }
 
+/**
+ * Why the failures failed.
+ *
+ * This is the section that answers "it says something went wrong and I do not
+ * know why". The visitor gets a short apology on purpose; the owner gets the
+ * upstream's own words.
+ */
+if (payload.recentFailures?.length) {
+  console.log(`\n${bar}`);
+  console.log('RECENT FAILURES - what the upstream actually said\n');
+  for (const failure of payload.recentFailures) {
+    console.log(`  ${failure.at}  (${failure.subject})`);
+    console.log(`    ${failure.detail}\n`);
+  }
+}
+
 // The bill is what the owner is actually watching, so it is restated alone.
 const month = payload.windows.find((w) => w.days === 30);
 if (month?.total) {

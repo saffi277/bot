@@ -31,6 +31,17 @@ export type Stats = {
     /** Distinct callers, so repeat use is visible against reach. */
     visitors: number;
   }>;
+  /**
+   * What the most recent failures actually said.
+   *
+   * Every failure has always written the upstream message into usage_log,
+   * and nothing ever read it back. The owner saw only the sentence the site
+   * shows a visitor — "something went wrong before processing" — which is
+   * true, useless, and identical whether the model name is wrong, the key is
+   * restricted, or the account has no billing. The answer was in the table
+   * the whole time.
+   */
+  recentFailures: Array<{ at: string; detail: string; subject: string }>;
 };
 
 /**
@@ -123,5 +134,24 @@ export async function collectStats(windows: Window[] = DEFAULT_WINDOWS): Promise
     }),
   );
 
-  return { generatedAt: new Date(now).toISOString(), windows: results };
+  const failures = await store.db
+    .prepare(
+      `SELECT created_at, detail, subject FROM usage_log
+        WHERE status <> 'ok' ORDER BY created_at DESC LIMIT 8`,
+    )
+    .all<{ created_at: string; detail: string | null; subject: string }>();
+
+  return {
+    generatedAt: new Date(now).toISOString(),
+    windows: results,
+    recentFailures: (failures.results ?? []).map((row) => ({
+      at: row.created_at,
+      // Upstream messages carry the diagnosis in the first line or two; the
+      // rest is a stack of JSON that fills a terminal without adding to it.
+      detail: (row.detail ?? 'no detail recorded').slice(0, 300),
+      // The kind of caller, not who they were: this answers "is it everyone
+      // or one person" without printing ids the owner has no use for.
+      subject: row.subject.split(':')[0],
+    })),
+  };
 }
