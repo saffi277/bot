@@ -19,6 +19,8 @@ const api = process.env.TELEGRAM_API_BASE || 'https://api.telegram.org/bot';
 
 const rows = [];
 const note = (ok, label, detail, fix) => rows.push({ ok, label, detail, fix });
+/** Worth saying, but not a reason to hold the launch. */
+const warn = (label, detail, fix) => rows.push({ ok: false, soft: true, label, detail, fix });
 
 
 async function call(method) {
@@ -116,14 +118,104 @@ if (!appUrl) {
     'Without it the "open Saffi" button has nowhere to go');
 } else {
   note(true, 'site address', appUrl, null);
+  await checkSite(appUrl);
+}
+
+/**
+ * Asks the site itself, rather than trusting that APP_URL being set means it
+ * works.
+ *
+ * A perfectly configured bot pointing at a site that was never deployed, or
+ * deployed without its counter database, used to pass this check completely —
+ * it only ever confirmed the address existed as a string. The site already
+ * publishes everything needed on two public routes; nobody was asking.
+ */
+async function checkSite(base) {
+  const get = async (path) => {
+    const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(15000) });
+    return { response, body: await response.json() };
+  };
+
+  let enhance;
+  try {
+    enhance = await get('/api/enhance');
+  } catch (error) {
+    note(false, 'site reachable', `${base} did not answer (${error.message})`,
+      'Deploy the site, or fix APP_URL. Telegram cannot deliver to an address that is not there');
+    return;
+  }
+
+  note(true, 'site reachable', `answered from ${base}`, null);
+
+  // Fails closed by design: no counters means no spending ceiling, so the
+  // route refuses everything rather than risk an unbounded bill.
+  if (enhance.body.storage) {
+    note(true, 'counter database', 'bound', null);
+  } else {
+    note(false, 'counter database', 'not bound - ALL processing is refused',
+      'Bind D1 in the hosting settings (D1_BINDING, default DB). Without it nothing can be processed at all');
+  }
+
+  if (enhance.body.configured) {
+    note(true, 'model key', 'set on the site', null);
+  } else {
+    warn('model key', 'not set on the site yet - restoration will politely refuse',
+      'Add GEMINI_API_KEY in the hosting settings when you are ready to spend. Everything else works without it');
+  }
+
+  const count = enhance.body.operations?.length ?? 0;
+  note(count > 0, 'services', count ? `${count} offered` : 'none reached the site',
+    count ? null : 'The catalogue did not load; the interface will have nothing to show');
+
+  // Printed so the owner sees the ceiling that is actually in force, rather
+  // than the one being assumed.
+  note(true, 'daily cap', `${enhance.body.dailyCap} image(s) across everyone`, null);
+  note(true, 'output limit', `${enhance.body.maxOutputEdge}px longest edge`, null);
+
+  try {
+    const telegramSide = await get('/api/telegram');
+    const remote = telegramSide.body.botUsername;
+    if (!remote) {
+      warn('bot on the site', 'TELEGRAM_BOT_USERNAME is not set there',
+        'Sign-in will not appear on the site until it is added in the hosting settings');
+    } else if (username && remote !== username) {
+      note(false, 'bot on the site', `site says @${remote}, here it is @${username}`,
+        'The two environments disagree - fix whichever is wrong');
+    } else {
+      note(true, 'bot on the site', `@${remote}`, null);
+    }
+  } catch {
+    warn('bot on the site', 'could not be read', null);
+  }
+
+  // Confirms middleware.ts actually shipped; it is easy to have locally and
+  // miss in the deployed build.
+  const csp = enhance.response.headers.get('content-security-policy');
+  note(Boolean(csp), 'security headers', csp ? 'present' : 'missing',
+    csp ? null : 'middleware.ts did not ship, or the deploy is older than it');
+
+  if (!process.env.ADMIN_TOKEN) {
+    warn('usage report', 'ADMIN_TOKEN not set',
+      'Optional. Set it here and in the hosting settings to use: npm run stats');
+  } else {
+    note(true, 'usage report', 'ready - run: npm run stats', null);
+  }
 }
 
 for (const row of rows) {
-  console.log(`${row.ok ? '[ OK ]' : '[FAIL]'} ${row.label.padEnd(16)} ${row.detail}`);
+  const mark = row.ok ? '[ OK ]' : row.soft ? '[note]' : '[FAIL]';
+  console.log(`${mark} ${row.label.padEnd(18)} ${row.detail}`);
   if (row.fix) console.log(`       -> ${row.fix}`);
 }
 
-const failed = rows.filter((r) => !r.ok).length;
+// Only real blockers set the exit code. Treating "the model key is not added
+// yet" as a failure would make the tool cry wolf about the intended state.
+const blocking = rows.filter((r) => !r.ok && !r.soft).length;
+const notes = rows.filter((r) => r.soft).length;
 console.log('-'.repeat(58));
-console.log(failed ? `${failed} problem(s) blocking launch` : 'Bot is ready - send it /start');
-process.exit(failed ? 1 : 0);
+if (blocking) {
+  console.log(`${blocking} problem(s) blocking launch`);
+} else {
+  console.log(notes ? `Ready to launch - send it /start  (${notes} note(s) above)` : 'Ready to launch - send it /start');
+}
+process.exit(blocking ? 1 : 0);
