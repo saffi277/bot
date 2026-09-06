@@ -40,3 +40,6 @@ next-env.d.ts
 quality-report.html
 model-bakeoff.html
 tsconfig.tsbuildinfo
+
+# Written by: npm run prompt - a copy of the live prompt, for manual testing
+prompt-for-testing.txt

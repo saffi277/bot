@@ -18,6 +18,7 @@
     "quality": "node --env-file-if-exists=.env.local scripts/quality-report.mjs",
     "bakeoff": "node --env-file-if-exists=.env.local scripts/model-bakeoff.mjs",
     "bot:doctor": "node --env-file-if-exists=.env.local scripts/bot-doctor.mjs",
+    "prompt": "node scripts/print-prompt.mjs",
     "models": "node --env-file-if-exists=.env.local scripts/list-models.mjs",
     "stats": "node --env-file-if-exists=.env.local scripts/stats.mjs",
     "bot:webhook": "node --env-file-if-exists=.env.local telegram-bot/register-webhook.mjs",
