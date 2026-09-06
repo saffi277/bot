@@ -1,0 +1,286 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Grade a photo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; background: #040a14; color: #e8eef7; padding: 20px;
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 1.3rem; margin: 0 0 .2rem; }
+  p.sub { margin: 0 0 1.2rem; color: #8fa3bd; font-size: .92rem; }
+  #drop {
+    border: 2px dashed #2b415f; border-radius: 14px; padding: 30px 18px; text-align: center;
+    background: #0a1526; cursor: pointer; margin-bottom: 18px;
+  }
+  #drop:hover, #drop.over { border-color: #4d7cc0; background: #0e1c31; }
+  .work { display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: start; }
+  @media (max-width: 860px) { .work { grid-template-columns: 1fr; } }
+  .stage { position: relative; background: #0a1526; border-radius: 14px; overflow: hidden; }
+  canvas { display: block; width: 100%; height: auto; }
+  .tag {
+    position: absolute; top: 10px; inset-inline-start: 10px; z-index: 2;
+    background: #000a; padding: .2rem .6rem; border-radius: 6px; font-size: .78rem; letter-spacing: .04em;
+  }
+  .row { margin-bottom: 13px; }
+  .row label { display: flex; justify-content: space-between; font-size: .84rem; color: #8fa3bd; }
+  .row label b { color: #e8eef7; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: #4d7cc0; margin-top: 2px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  button, a.dl {
+    flex: 1 1 auto; padding: .6rem .9rem; border-radius: 9px; border: 1px solid #2b415f;
+    background: #0e1c31; color: #e8eef7; font: inherit; font-size: .88rem; cursor: pointer;
+    text-align: center; text-decoration: none;
+  }
+  button.primary, a.dl { background: #4d7cc0; border-color: #4d7cc0; font-weight: 600; }
+  button:hover { border-color: #4d7cc0; }
+  #settings {
+    margin-top: 14px; width: 100%; height: 84px; background: #060e1a; color: #7fd6a2;
+    border: 1px solid #2b415f; border-radius: 9px; padding: 9px; font-family: ui-monospace, monospace;
+    font-size: .76rem; resize: vertical;
+  }
+  .hint { color: #61748f; font-size: .8rem; margin-top: 10px; }
+</style>
+
+<main>
+  <h1>Grade a photo</h1>
+  <p class="sub">
+    The second half of the restoration: colour, brightness and contrast.
+    Load the face-restored image here and tune it until it matches the look you want.
+  </p>
+
+  <div id="drop">
+    <strong>Click, or drag the image in</strong><br>
+    <span style="color:#8fa3bd;font-size:.88rem">Runs entirely in this browser — nothing is uploaded.</span>
+  </div>
+  <input type="file" id="file" accept="image/*" hidden>
+
+  <div class="work" id="work" hidden>
+    <div>
+      <div class="stage">
+        <span class="tag" id="tag">GRADED</span>
+        <canvas id="view"></canvas>
+      </div>
+      <p class="hint">Press and hold the image to see the original underneath.</p>
+    </div>
+
+    <div>
+      <div class="row"><label>Exposure <b id="vExposure"></b></label>
+        <input type="range" id="exposure" min="-40" max="60" value="12"></div>
+      <div class="row"><label>Contrast <b id="vContrast"></b></label>
+        <input type="range" id="contrast" min="-30" max="80" value="22"></div>
+      <div class="row"><label>Blacks <b id="vBlacks"></b></label>
+        <input type="range" id="blacks" min="-30" max="60" value="18"></div>
+      <div class="row"><label>Warmth <b id="vWarmth"></b></label>
+        <input type="range" id="warmth" min="-40" max="60" value="10"></div>
+      <div class="row"><label>Saturation <b id="vSaturation"></b></label>
+        <input type="range" id="saturation" min="-40" max="80" value="20"></div>
+      <div class="row"><label>Clarity <b id="vClarity"></b></label>
+        <input type="range" id="clarity" min="0" max="100" value="30"></div>
+      <div class="row"><label>Skin brightness <b id="vSkin"></b></label>
+        <input type="range" id="skin" min="0" max="60" value="14"></div>
+
+      <div class="btns">
+        <button id="reset">Reset</button>
+        <button id="neutral">All off</button>
+        <a class="dl" id="save" download="graded.jpg">Save</a>
+      </div>
+
+      <textarea id="settings" readonly></textarea>
+      <button class="primary" id="copy" style="margin-top:8px">Copy these numbers</button>
+      <p class="hint">Send the copied line back — those exact values go into the product.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+/**
+ * A darkroom, not a model.
+ *
+ * The face-restoration stage returns a sharp but flat photograph: it fixes
+ * detail and leaves colour alone. Everything a customer describes as "quality"
+ * after that - brighter, warmer, punchier, whites that read white - is this
+ * stage, and it is arithmetic rather than inference. No key, no cost, no
+ * waiting, and the same input always gives the same output.
+ *
+ * The point of the sliders is to find the numbers by eye once, against a
+ * reference the owner already trusts, so the product can then apply them
+ * without anyone tuning anything again.
+ */
+
+const CONTROLS = ['exposure', 'contrast', 'blacks', 'warmth', 'saturation', 'clarity', 'skin'];
+const DEFAULTS = { exposure: 12, contrast: 22, blacks: 18, warmth: 10, saturation: 20, clarity: 30, skin: 14 };
+
+const drop = document.getElementById('drop');
+const file = document.getElementById('file');
+const work = document.getElementById('work');
+const view = document.getElementById('view');
+const tag = document.getElementById('tag');
+const settings = document.getElementById('settings');
+const save = document.getElementById('save');
+let source = null;      // ImageData of the original
+let blurred = null;     // blurred copy, for the clarity pass
+let raf = 0;
+
+drop.onclick = () => file.click();
+file.onchange = () => file.files[0] && load(file.files[0]);
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && load(e.dataTransfer.files[0]); };
+
+function load(blob) {
+  const image = new Image();
+  image.onload = () => {
+    // Working at full resolution keeps the preview honest, but a 12MP phone
+    // photo would make every slider drag stutter, so the stage is capped.
+    const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+    const w = Math.round(image.width * scale);
+    const h = Math.round(image.height * scale);
+    view.width = w;
+    view.height = h;
+
+    const scratch = document.createElement('canvas');
+    scratch.width = w;
+    scratch.height = h;
+    const sctx = scratch.getContext('2d', { willReadFrequently: true });
+    sctx.drawImage(image, 0, 0, w, h);
+    source = sctx.getImageData(0, 0, w, h);
+
+    // One blurred copy, reused by every render: clarity is the difference
+    // between the image and a blurred version of it, and re-blurring on each
+    // slider move would be the slowest thing here by far.
+    sctx.filter = `blur(${Math.max(1, Math.round(Math.max(w, h) / 220))}px)`;
+    sctx.drawImage(image, 0, 0, w, h);
+    blurred = sctx.getImageData(0, 0, w, h);
+
+    work.hidden = false;
+    render();
+  };
+  image.src = URL.createObjectURL(blob);
+}
+
+const read = (id) => Number(document.getElementById(id).value);
+const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
+
+function render() {
+  if (!source) return;
+  const exposure = read('exposure') / 100;
+  const contrast = read('contrast') / 100;
+  const blacks = read('blacks') / 100;
+  const warmth = read('warmth') / 100;
+  const saturation = read('saturation') / 100;
+  const clarity = read('clarity') / 100;
+  const skin = read('skin') / 100;
+
+  const src = source.data;
+  const blur = blurred.data;
+  const out = new ImageData(source.width, source.height);
+  const dst = out.data;
+
+  for (let i = 0; i < src.length; i += 4) {
+    let r = src[i], g = src[i + 1], b = src[i + 2];
+
+    // Clarity first: local contrast recovered from the blurred copy. Doing it
+    // before the tonal work keeps it from amplifying the contrast curve.
+    if (clarity) {
+      r += (r - blur[i]) * clarity * 1.5;
+      g += (g - blur[i + 1]) * clarity * 1.5;
+      b += (b - blur[i + 2]) * clarity * 1.5;
+    }
+
+    // Exposure: a straight gain, which is what lifting a dull frame needs.
+    if (exposure) { const k = 1 + exposure; r *= k; g *= k; b *= k; }
+
+    // Blacks: pull the darkest tones down so the image has a true black
+    // instead of a grey floor. This is most of what reads as "punch".
+    if (blacks) {
+      const k = 1 + blacks;
+      r = (r - blacks * 26) * k / (1 + blacks * 0.35);
+      g = (g - blacks * 26) * k / (1 + blacks * 0.35);
+      b = (b - blacks * 26) * k / (1 + blacks * 0.35);
+    }
+
+    // Contrast around mid-grey.
+    if (contrast) {
+      const k = 1 + contrast;
+      r = (r - 128) * k + 128;
+      g = (g - 128) * k + 128;
+      b = (b - 128) * k + 128;
+    }
+
+    // Warmth: shift the white balance towards daylight. Sunlight on skin is
+    // warm, and a cold frame reads as amateur however sharp it is.
+    if (warmth) { r *= 1 + warmth * 0.16; b *= 1 - warmth * 0.13; }
+
+    // Skin brightness, applied only to pixels that are plausibly skin: warm,
+    // mid-to-light, and not strongly coloured. Lifting the whole frame instead
+    // would wash out the clothing and the sky along with the face.
+    if (skin) {
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const isSkin = r > g && g > b && max > 60 && max < 250 && max - min < 120;
+      if (isSkin) {
+        const lift = skin * 34;
+        r += lift; g += lift * 0.93; b += lift * 0.86;
+      }
+    }
+
+    // Saturation last, so it acts on the finished tones.
+    if (saturation) {
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const k = 1 + saturation;
+      r = luma + (r - luma) * k;
+      g = luma + (g - luma) * k;
+      b = luma + (b - luma) * k;
+    }
+
+    dst[i] = clamp(r); dst[i + 1] = clamp(g); dst[i + 2] = clamp(b); dst[i + 3] = src[i + 3];
+  }
+
+  view.getContext('2d').putImageData(out, 0, 0);
+  for (const id of CONTROLS) {
+    document.getElementById('v' + id[0].toUpperCase() + id.slice(1)).textContent = read(id);
+  }
+  settings.value = JSON.stringify(Object.fromEntries(CONTROLS.map((id) => [id, read(id)])));
+  save.href = view.toDataURL('image/jpeg', 0.95);
+}
+
+function schedule() {
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(render);
+}
+for (const id of CONTROLS) document.getElementById(id).oninput = schedule;
+
+document.getElementById('reset').onclick = () => {
+  for (const id of CONTROLS) document.getElementById(id).value = DEFAULTS[id];
+  render();
+};
+document.getElementById('neutral').onclick = () => {
+  for (const id of CONTROLS) document.getElementById(id).value = 0;
+  render();
+};
+document.getElementById('copy').onclick = () => {
+  settings.select();
+  navigator.clipboard?.writeText(settings.value);
+};
+
+// Hold to compare. A grade always looks like an improvement until the
+// untouched frame is put next to it.
+let held = false;
+const showOriginal = () => {
+  if (!source || held) return;
+  held = true;
+  tag.textContent = 'ORIGINAL';
+  view.getContext('2d').putImageData(source, 0, 0);
+};
+const showGraded = () => {
+  if (!held) return;
+  held = false;
+  tag.textContent = 'GRADED';
+  render();
+};
+view.addEventListener('pointerdown', showOriginal);
+view.addEventListener('pointerup', showGraded);
+view.addEventListener('pointerleave', showGraded);
+</script>
