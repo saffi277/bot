@@ -37,6 +37,10 @@ function load() {
 
 const { measure, choosePath, routeImage, THRESHOLDS } = await load();
 
+// choosePath is exercised directly too: routeImage bundles measuring with
+// deciding, and a rule that only ever runs behind the measurement cannot be
+// checked against a reading we choose ourselves.
+
 /**
  * Box-blurs in place, which is how softness is simulated here.
  *
@@ -164,6 +168,19 @@ check('routing the same image twice gives the same answer', () => {
 check('an image too small to sample falls back instead of crashing', () => {
   const { path } = routeImage({ data: new Uint8ClampedArray(4 * 4), width: 2, height: 2 });
   assert.ok(path.id, 'a path must always be returned');
+});
+
+check('the rules can be checked against readings directly, without an image', () => {
+  // Guards the ordering itself: a frame that is damaged AND grey AND soft all
+  // at once must still be treated as damaged.
+  const worst = { megapixels: 0.3, sharpness: 1, colorfulness: 2, speckle: 0.01, brightness: 100 };
+  assert.equal(choosePath(worst).id, 'dust_scratch');
+  assert.equal(choosePath({ ...worst, speckle: 0 }).id, 'recover');
+  assert.equal(choosePath({ ...worst, speckle: 0, megapixels: 8, colorfulness: 40 }).id, 'super_focus');
+  assert.equal(
+    choosePath({ megapixels: 8, sharpness: 30, colorfulness: 40, speckle: 0, brightness: 128 }).id,
+    'high_fidelity',
+  );
 });
 
 check('measurements are plain finite numbers, never NaN', () => {
