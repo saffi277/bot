@@ -36,7 +36,14 @@
  * not just in the copy: enhancement is one call, and a creative service that
  * returns several variants costs one call each.
  */
-export type OperationKind = 'enhance' | 'creative';
+/**
+ * `retouch` is the third kind, added when the owner asked for Remini's result
+ * screen (2026-09-07). It differs from both of the others in a way that
+ * matters to the interface: a retouch is applied *to a photograph the customer
+ * is already looking at*, not chosen before uploading. It costs a model call
+ * like a creative service, and it protects identity like every service here.
+ */
+export type OperationKind = 'enhance' | 'creative' | 'retouch';
 
 export type Operation = {
   /** Stable id sent by the client. Never translated — it is a wire value. */
@@ -166,6 +173,70 @@ export const OPERATIONS: readonly Operation[] = [
       OUTPUT_RULE,
     ].join(' '),
   },
+  /**
+   * Retouches. Each one names a single, bounded change.
+   *
+   * The temptation on this screen is one button called "make me look better",
+   * and that is the button that hands back a different person. Naming exactly
+   * what each does keeps the customer in charge of the change and keeps the
+   * prompt narrow enough to be checkable.
+   */
+  {
+    id: 'blemish',
+    kind: 'retouch',
+    label: 'إزالة الشوائب',
+    hint: 'يشيل الحبوب والبقع المؤقتة، ويترك الشامات والنمش والندوب مكانها',
+    units: 1,
+    prompt: [
+      'Remove temporary blemishes from the skin in this photograph: spots, pimples, and short-lived redness or irritation.',
+      'Leave permanent features exactly as they are — moles, freckles, birthmarks, scars, and the lines of expression are part of this person and must survive untouched.',
+      'Keep the skin looking like skin: pores, stubble and natural texture must remain visible at full size.',
+      IDENTITY_RULE,
+      OUTPUT_RULE,
+    ].join(' '),
+  },
+  {
+    id: 'teeth',
+    kind: 'retouch',
+    label: 'تبييض الأسنان',
+    hint: 'يشيل الاصفرار بلمسة خفيفة، بلا تغيير شكل الأسنان',
+    units: 1,
+    prompt: [
+      'Reduce yellowing on the teeth in this photograph with a light hand, as a careful retoucher would.',
+      'Keep the natural translucency and shading of real teeth: no flat white, no glow, no uniform blocks of colour. Teeth that read as artificial are a worse result than teeth that read as slightly yellow.',
+      'Do not change the shape, size, alignment or spacing of any tooth, and do not alter the mouth or lips.',
+      IDENTITY_RULE,
+      OUTPUT_RULE,
+    ].join(' '),
+  },
+  {
+    id: 'eyes',
+    kind: 'retouch',
+    label: 'إبراز العينين',
+    hint: 'يوضّح تفاصيل العين والرموش ويشيل الاحمرار، بلا تكبير ولا تغيير اللون',
+    units: 1,
+    prompt: [
+      'Bring the eyes in this photograph into clearer focus: recover the detail of the iris, the lashes and the eyebrows, and clean up redness in the whites.',
+      'Do not enlarge the eyes, change their colour, change their spacing, or add catchlights that were not there. This is recovery of what the photograph holds, not a new pair of eyes.',
+      'Keep the rest of the face exactly as it is.',
+      IDENTITY_RULE,
+      OUTPUT_RULE,
+    ].join(' '),
+  },
+  {
+    id: 'smooth',
+    kind: 'retouch',
+    label: 'تنعيم خفيف',
+    hint: 'يوحّد لون البشرة ويخفّف الظل القاسي، ويبقي المسام والملمس',
+    units: 1,
+    prompt: [
+      'Even out the skin in this photograph: reduce blotchiness, uneven tone and harsh shadow so the face reads as well lit.',
+      'This is evening, not erasing. Pores, fine texture, stubble and the natural lines of the face must all remain clearly visible at full size — a face rendered as smooth plastic is the failure this service must avoid.',
+      'Do not change the shape or proportions of anything, and do not lighten the person past their own natural complexion.',
+      IDENTITY_RULE,
+      OUTPUT_RULE,
+    ].join(' '),
+  },
   {
     id: 'studio',
     kind: 'creative',
@@ -195,13 +266,24 @@ export function findOperation(id: string | null | undefined): Operation | null {
   return OPERATIONS.find((operation) => operation.id === (id || DEFAULT_OPERATION)) ?? null;
 }
 
-/** What the front end needs to render the catalogue. The prompt stays server-side. */
-export function catalogue(): Array<Omit<Operation, 'prompt'>> {
+/**
+ * What the front end needs to render the catalogue. The prompt stays
+ * server-side.
+ *
+ * `available` says whether this service can actually run right now. It is
+ * false for everything while no model key is configured, and the result screen
+ * is meant to render those entries visibly disabled rather than hide them:
+ * a customer who cannot see a service cannot look forward to it, and an owner
+ * who cannot see it has no way to tell a service that is switched off from one
+ * that was never built.
+ */
+export function catalogue(available = true): Array<Omit<Operation, 'prompt'> & { available: boolean }> {
   return OPERATIONS.map((operation) => ({
     id: operation.id,
     kind: operation.kind,
     label: operation.label,
     hint: operation.hint,
     units: operation.units,
+    available,
   }));
 }

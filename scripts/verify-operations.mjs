@@ -30,7 +30,7 @@ assert.equal(new Set(ids).size, ids.length, 'Two services share an id; the wrong
 
 for (const operation of OPERATIONS) {
   assert.ok(operation.id && /^[a-z0-9_]+$/.test(operation.id), `Bad id: ${operation.id}`);
-  assert.ok(['enhance', 'creative'].includes(operation.kind), `${operation.id}: unknown kind`);
+  assert.ok(['enhance', 'creative', 'retouch'].includes(operation.kind), `${operation.id}: unknown kind`);
   assert.ok(operation.label?.trim(), `${operation.id}: needs a label the visitor can read`);
   assert.ok(operation.hint?.trim(), `${operation.id}: needs a line saying what it does`);
   assert.ok(operation.prompt?.trim(), `${operation.id}: needs a prompt`);
@@ -59,6 +59,28 @@ assert.equal(findOperation(''), fallback, 'An empty id means "no choice made", s
 for (const entry of catalogue()) {
   assert.ok(!('prompt' in entry), `${entry.id}: the prompt must not reach the browser`);
   assert.ok(entry.units >= 1 && entry.label && entry.kind, `${entry.id}: the front end needs kind, label and units`);
+}
+
+// Without a model key nothing can run, and the screen has to be told so rather
+// than left to present services that will fail on press.
+for (const entry of catalogue(false)) {
+  assert.equal(entry.available, false, `${entry.id}: must report itself unavailable with no key`);
+}
+for (const entry of catalogue(true)) {
+  assert.equal(entry.available, true, `${entry.id}: must report itself available once configured`);
+}
+
+/**
+ * Retouches carry the largest risk in the catalogue: they exist to change how
+ * a person looks, and "looks better" is one careless prompt away from "looks
+ * like someone else". Every one of them must say what it will not touch.
+ */
+for (const operation of OPERATIONS.filter((entry) => entry.kind === 'retouch')) {
+  assert.match(
+    operation.prompt,
+    /pores|texture|translucen|do not enlarge/i,
+    `${operation.id}: retouch prompt sets no limit on how far it may go`,
+  );
 }
 
 /**
@@ -152,10 +174,10 @@ for (const operation of OPERATIONS) {
   );
 }
 
-const enhance = OPERATIONS.filter((o) => o.kind === 'enhance');
-const creative = OPERATIONS.filter((o) => o.kind === 'creative');
+const count = (kind) => OPERATIONS.filter((o) => o.kind === kind).length;
 const worst = Math.max(...OPERATIONS.map((o) => o.units));
 console.log(
-  `operations verified: ${OPERATIONS.length} (${enhance.length} enhance, ${creative.length} creative), ` +
+  `operations verified: ${OPERATIONS.length} ` +
+    `(${count('enhance')} enhance, ${count('creative')} creative, ${count('retouch')} retouch), ` +
     `costliest press = ${worst} unit${worst === 1 ? '' : 's'}`,
 );

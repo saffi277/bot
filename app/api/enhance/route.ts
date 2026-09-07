@@ -1,6 +1,7 @@
 import { GeminiProvider } from '@/lib/enhance/gemini';
 import { EnhanceProvider, ProviderError } from '@/lib/enhance/provider';
 import { catalogue, findOperation } from '@/lib/enhance/operations';
+import { presetCatalogue } from '@/lib/enhance/presets';
 import { SIGNATURE_BYTES, sniffImageType } from '@/lib/image-type';
 import { limits, peek, release, reserve, Subject } from '@/lib/ratelimit';
 import { getConfig } from '@/lib/telegram';
@@ -70,7 +71,16 @@ export async function GET(request: Request) {
     dailyCap: limits().global,
     // The catalogue, so the front end renders whatever services exist rather
     // than a list hardcoded in two places that drift apart. Prompts stay here.
-    operations: catalogue(),
+    // `available` is false for every service while no key is configured, so
+    // the result screen can show them disabled instead of hiding them.
+    operations: catalogue(getProvider().isConfigured()),
+    /**
+     * Filters, lighting and focus for the result screen. These cost nothing
+     * and are applied in the browser, so they work with no key, no billing and
+     * no round trip — which is why they are listed separately from operations
+     * rather than mixed in with services that spend money.
+     */
+    presets: presetCatalogue(),
   });
 }
 
